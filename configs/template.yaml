@@ -1,0 +1,23 @@
+device:
+gpu_ids:
+work_dir: 
+# resume first then load
+resume_from:
+load_from:
+log_level: INFO
+dist_params: None
+runner:
+  type:
+optimizer:
+  type:
+model:
+
+data:
+  workers_per_gpu: 1
+  train:
+  val:
+  test:
+  train_loader:
+  val_loader:
+  test_loader:
+  sampler:
