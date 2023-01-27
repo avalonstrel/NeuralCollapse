@@ -11,19 +11,19 @@ import shutil
 import torch
 import torch.distributed as dist
 
-from utils.parallel import get_dist_info, init_dist
+from utils.parallel import get_dist_info, init_dist, setup_multi_processes
 
 
 from apis import init_random_seed, set_random_seed, train_model
-from utils import auto_select_device, get_root_logger, setup_multi_processes, init_dist
+from utils import auto_select_device, get_root_logger
 from configs import config_from_file
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a model')
-    parser.add_argument('config', help='train config file path')
+    parser.add_argument('--config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
     parser.add_argument(
-        '--resume-from', help='the checkpoint file to resume from')
+        '--resume-from', help='the checkpoint file to resume from', default='')
     parser.add_argument(
         '--no-validate',
         action='store_true',
@@ -46,6 +46,7 @@ def parse_args():
         action='store_true',
         help='whether to set deterministic options for CUDNN backend.')
     parser.add_argument('--local_rank', type=int, default=0)
+
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -71,8 +72,7 @@ def main():
         cfg.work_dir = args.work_dir
     elif cfg.get('work_dir', None) is None:
         # use config filename as default work_dir if cfg.work_dir is None
-        cfg.work_dir = osp.join('./exprs',
-                                osp.splitext(osp.basename(args.config))[0])
+        cfg.work_dir = './exprs/tmp'
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     
@@ -92,7 +92,7 @@ def main():
     os.makedirs(cfg.work_dir, exist_ok=True)
     # dump config
     # yaml.safe_dump(cfg, osp.join(cfg.work_dir, osp.basename(args.config)))
-    shutil.copyfile(args.config, osp.join(cfg.work_dir, osp.basename(args.config)))
+    # shutil.copyfile(args.config, osp.join(cfg.work_dir, osp.basename(args.config)))
 
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())

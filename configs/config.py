@@ -42,9 +42,9 @@ def update_config_from_file(cfg, filename):
         _update_config(cfg, exp_config)
 
 def config_from_file(filename):
-    cfg = edict()
+    # cfg = edict()
     exp_config = None
     with open(filename) as f:
         exp_config = edict(yaml.safe_load(f))
-        _update_config(cfg, exp_config)
-    return cfg
+        # _update_config(cfg, exp_config)
+    return exp_config

@@ -48,6 +48,7 @@ def wrap_distributed_model(model, device='cuda', *args, **kwargs):
     if 'cuda' in device:
         from torch.cuda import current_device
         from torch.nn.parallel import DistributedDataParallel
+        print(model)
         model = DistributedDataParallel(
             model.cuda(), *args, device_ids=[current_device()], **kwargs)
     else:

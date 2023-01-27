@@ -11,7 +11,10 @@ import torch
 
 from utils.parallel import get_dist_info
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler 
+
+from datasets.transforms import build_transforms
+from datasets.samplers import build_sampler
+from .cifar import CIFAR10, CIFAR100
 
 
 def worker_init_fn(worker_id, num_workers, rank, seed):
@@ -22,25 +25,47 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
     random.seed(worker_seed)
     torch.manual_seed(worker_seed)
 
-def build_from_cfg(cfg):
-    """Bulid a dataset from config for dataset
+def build_datasets(cfg, default_args=None):
+    """Bulid a dataset from a config for dataset
     Args:
         cfg (dict): A dictionary contains the information to contruct dataset object.
         Typically, there should be a `type` and other `kwargs`.
     """
-    raise NotImplementedError("Need to be implemented accroding to different types of datasets.")
+    assert len(cfg.type) == len(cfg.root), 'The number of dataset types should be equal to roots'
+    datasets = {}
 
-def build_sampler(cfg, default_args=None):
-    if cfg is None:
-        return None
-    elif cfg['type'] == 'DistributedSampler':
-        return DistributedSampler(default_args)
-        
+    if default_args is None:
+        default_args = {}
 
-def build_dataset(cfg, default_args=None):
-    dataset = build_from_cfg(cfg,  default_args)
-    return dataset
-
+    for data_type, root, trans_list, resized_size in zip(cfg.type, cfg.root, cfg.transforms, cfg.resized_size):
+        trans_kwargs = {
+            'RandomResizedCrop':{'size':resized_size},
+            'Resize':{'size':resized_size}
+        }
+        if data_type == 'cifar10':
+             dataset = CIFAR10(
+                root=root,
+                transforms=build_transforms(trans_list, trans_kwargs),
+                **default_args)
+        if data_type == 'cifar100':
+             dataset = CIFAR100(
+                root=root,
+                transforms=build_transforms(trans_list, trans_kwargs),
+                **default_args)
+        elif data_type == 'quickdraw':
+            dataset = QuickDraw(
+                root=root,
+                transforms=build_transforms(trans_list, trans_kwargs),
+                **default_args)
+        elif data_type == 'tuberlin':
+            dataset = TUBerlin(
+                root=root,
+                transforms=build_transforms(trans_list, trans_kwargs),
+                **default_args)
+        else:
+            ValueError(f'Unsupported type {data_type} of dataset.')
+        datasets[data_type] = dataset
+    return datasets
 
 def build_dataloader(dataset,
                      samples_per_gpu,
@@ -85,6 +110,7 @@ def build_dataloader(dataset,
     rank, world_size = get_dist_info()
 
     # Custom sampler logic
+    
     if sampler_cfg:
         # shuffle=False when val and test
         sampler_cfg.update(shuffle=shuffle)
@@ -98,7 +124,7 @@ def build_dataloader(dataset,
     elif dist:
         sampler = build_sampler(
             dict(
-                type='DistributedSampler',)
+                type='DistributedSampler',),
             dict(dataset=dataset,
                 num_replicas=world_size,
                 rank=rank,
@@ -107,10 +133,11 @@ def build_dataloader(dataset,
                 seed=seed))
     else:
         sampler = None
-
+    # print('sampler', sampler_cfg, sampler)
     # If sampler exists, turn off dataloader shuffle
     if sampler is not None:
         shuffle = False
+    
 
     if dist:
         batch_size = samples_per_gpu
@@ -123,16 +150,17 @@ def build_dataloader(dataset,
         worker_init_fn, num_workers=num_workers, rank=rank,
         seed=seed) if seed is not None else None
 
+    # print(batch_size, samples_per_gpu, num_workers)
+    
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
         sampler=sampler,
         num_workers=num_workers,
-        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu),
         pin_memory=pin_memory,
         shuffle=shuffle,
         worker_init_fn=init_fn,
         **kwargs)
-
+    
     return data_loader
 

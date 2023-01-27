@@ -1,2 +1,2 @@
 # NeuralCollapse
-Experiments about neural collapse.
+An algorithm for Neural Collapse

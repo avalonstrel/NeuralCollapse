@@ -1,7 +1,6 @@
 # Inheritaed from open-mmlab/mmclassification
 # Modified by Hangyu LIN
 
-from .config import Config, ConfigDict, DictAction
 from .misc import (check_prerequisites, concat_list, deprecated_api_warning,
                    has_method, import_modules_from_strings, is_list_of,
                    is_method_overridden, is_seq_of, is_str, is_tuple_of,
@@ -16,14 +15,17 @@ from .progressbar import (ProgressBar, track_iter_progress,
 from .timer import Timer, TimerError, check_time
 
 from .logging import get_logger, print_log
-    
+from .logger import get_root_logger
+
 from .registry import Registry, build_from_cfg
 from .seed import worker_init_fn
-    
+# import parallel
 # try:
 #     import torch
 # except ImportError:
 __all__ = [
+    # 'parallel',
+    'get_root_logger', 
     'Config', 'ConfigDict', 'DictAction', 'is_str', 'iter_cast',
     'list_cast', 'tuple_cast', 'is_seq_of', 'is_list_of', 'is_tuple_of',
     'slice_list', 'concat_list', 'check_prerequisites', 'requires_package',

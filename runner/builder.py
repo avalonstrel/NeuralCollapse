@@ -1,9 +1,19 @@
 import torch
 
-from .optimzer import SGD, Adam, AdamW
-from .runner import Runner
+from .optimizer import SGD, Adam, AdamW
+from .nc_runner import NCRunner
 
-def build_optimizer(model, cfg):
+
+OPTIMIZER_DICT = {
+    'SGD':SGD,
+    'Adam':Adam,
+    'AdamW':AdamW
+}
+
+RUNNER_DICT = {
+    'NC':NCRunner
+}
+def build_optimizers(models, cfg):
     """Build an optimizer accroding to the cfg.
     Args:
         model (nn.Module): The model to be optimized.
@@ -11,7 +21,13 @@ def build_optimizer(model, cfg):
     Returns:
         optim (torch.optim.Optimizer)
     """
-    pass
+    assert cfg['type'] in OPTIMIZER_DICT, 'Unsupported optimizer {}.'.format(cfg['type'])
+    optims = {}
+    optim_args = {key:cfg[key] for key in cfg if key not in ['type']}
+
+    for key in models:
+        optims[key] = OPTIMIZER_DICT[cfg.type](models[key].parameters(), **optim_args)
+    return optims
 
 
 def build_runner(cfg):
@@ -21,4 +37,8 @@ def build_runner(cfg):
     Returns:
         runner (runner.Runner)
     """
-    pass
+    assert cfg['type'] in  RUNNER_DICT, 'Unsupported optimizer {}.'.format(cfg['type'])
+    runners = {}
+    runner_args = {key:cfg[key] for key in cfg if key not in ['type']}
+        
+    return RUNNER_DICT[cfg['type']](**runner_args)

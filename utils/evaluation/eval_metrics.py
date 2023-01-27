@@ -5,6 +5,76 @@ import numpy as np
 import torch
 from torch.nn.functional import one_hot
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        
+        res = {}
+        for k in topk:
+            
+            correct_k = correct[:k].float().sum().cpu().numpy()
+            res[k] = (correct_k / batch_size)
+        return res
+
+def fuzziness(feats, labels):
+    """
+    Compute fuzziness according to features and corresponding labels.
+    Args:
+        feats[torch.tensor, N x [*]]: features used to compute fuzziness
+        labels[torch.tensor, N]: labels of each sample
+    Return:
+        fuzziness[float]
+    """
+    device = torch.device('cuda:0')
+    feats = feats.reshape(feats.size(0), -1)  # [N x C]
+    C = 256
+    feats = feats[:, :C].to(device)
+    # compute mean
+    feat_means = {}  #{0:[C], 1:[C], 2:[C], ...}
+    for idx, label in enumerate(labels):
+        label_ = int(label.item())
+        if label_ in feat_means:
+            feat_means[label_].append(feats[idx])
+        else:
+            feat_means[label_] = []
+
+    whole_feat_mean = feats.mean(dim=0)  # [C]
+
+    # between class signal
+    # C = feats.size(1)
+    
+    signal_b = torch.zeros(C, C).to(device)
+    signal_w = torch.zeros(C, C).to(device)
+    for k in feat_means:
+        feat_mean = sum(feat_means[k]) / len(feat_means[k])
+        diff_b = feat_mean - whole_feat_mean
+        # clamp
+        # diff_b = diff_b[:C]
+        signal_b = signal_b + \
+                    len(feat_means[k]) * torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1))
+        for feat in feat_means[k]:
+            diff_w = feat - feat_mean
+            # diff_w = diff_w[:C]
+            signal_w = signal_w + torch.matmul(diff_w.reshape(-1, 1), diff_w.reshape(1, -1))
+
+    signal_b = signal_b / feats.size(0)
+    signal_w = signal_w / feats.size(0)
+
+    D_seperation = torch.trace(torch.matmul(signal_w, torch.linalg.pinv(signal_b)))
+    
+    return D_seperation
+
+    
+
+
+
 
 def calculate_confusion_matrix(pred, target):
     """Calculate confusion matrix according to the prediction and target.

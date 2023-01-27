@@ -8,7 +8,7 @@ from os import PathLike
 from typing import List
 
 import numpy as np
-from torch.utils.data import Dataset,
+from torch.utils.data import Dataset
 
 from .transforms import Compose
 
@@ -18,12 +18,11 @@ def expanduser(path):
     else:
         return path
 
-
 class BaseDataset(Dataset, metaclass=ABCMeta):
     """Base dataset.
 
     Args:
-        data_prefix (str): the prefix of data path
+        root (str): the prefix of data path
         transforms (list): a list of dict, where each element represents
             a operation defined in `transforms`
         ann_file (str | None): the annotation file. When ann_file is str,
@@ -33,16 +32,22 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
     """
 
     CLASSES = None
-
+    DEFAULT_TRNASFORMS = []
     def __init__(self,
-                 data_prefix,
+                 root,
                  transforms,
+                 target_transforms=None,
                  classes=None,
                  ann_file=None,
                  test_mode=False):
         super(BaseDataset, self).__init__()
-        self.data_prefix = expanduser(data_prefix)
-        self.trnasforms = Compose(transforms)
+        self.root = expanduser(root)
+        if transforms is None:
+            transforms = self.DEFAULT_TRNASFORMS
+        self.transforms = Compose(transforms)
+        if target_transforms is not None:
+            target_transforms = Compose(target_transforms)
+        self.target_transforms = target_transforms
         self.CLASSES = self.get_classes(classes)
         self.ann_file = expanduser(ann_file)
         self.test_mode = test_mode
@@ -84,12 +89,16 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
 
         return [int(self.data_infos[idx]['gt_label'])]
 
-
     def __len__(self):
         return len(self.data_infos)
 
     def __getitem__(self, idx):
-        return self.prepare_data(idx)
+        img, label = self.data_infos[idx]['img'], self.data_infos[idx]['gt_label']
+        if self.transforms is not None:
+            img = self.transforms(img)
+        if self.target_transforms is not None:
+            label = self.target_transforms(label)
+        return img, label
 
     @classmethod
     def get_classes(cls, classes=None):

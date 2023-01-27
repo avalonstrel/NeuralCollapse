@@ -8,10 +8,12 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from models import build_model
-from datasets import build_dataloader, build_dataset
-from utils import auto_select_device, get_root_logger
-from utils.parallel import wrap_distributed_model, wrap_non_distributed_model
+from models import build_models, build_losses
+from datasets import build_dataloader, build_datasets
+from runner import build_optimizers, build_runner
+
+from utils import  get_root_logger
+from utils.parallel import wrap_distributed_model, wrap_non_distributed_model, auto_select_device
 
 
 def init_random_seed(seed=None, device=None):
@@ -65,8 +67,7 @@ def set_random_seed(seed, deterministic=False):
 
 def train_model(cfg,
                 distributed=False,
-                validate=False,
-                timestamp=None,
+                validate=True,
                 device=None,
                 meta=None):
     """Train a model.
@@ -78,28 +79,32 @@ def train_model(cfg,
             environment. Defaults to False.
         validate (bool): Whether to do validation with
             :obj:`utils.hooks.EvalHook`. Defaults to False.
-        timestamp (str, optional): The timestamp string to auto generate the
-            name of log files. Defaults to None.
         device (str, optional): TODO
         meta (dict, optional): A dict records some import information such as
             environment info and seed, which will be logged in logger hook.
             Defaults to None.
     """
-    # build model and initialize
-    model = build_model(cfg.model)
-    model.init_weights()
-
-    # build datasets
-    datasets = [build_dataset(cfg.data.train)]
-    if len(cfg.workflow) == 2:
-        val_dataset = copy.deepcopy(cfg.data.val)
-        val_dataset.pipeline = cfg.data.train.pipeline
-        datasets.append(build_dataset(val_dataset))
+    seed = meta['seed']
+    set_random_seed(seed, deterministic=True)
 
     logger = get_root_logger()
 
-    # prepare data loaders
-    dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
+    # build model and initialize, dict
+    models = build_models(cfg.model)
+
+    
+
+    # build losses
+    losses = build_losses(cfg.loss)
+
+    logger.info('Models and losses building finished.')
+
+    # build datasets
+    datasets = build_datasets(cfg.data.train)  # A dict of datasets
+    if len(cfg.workflow) == 2:
+        # Not Implemented yet, may usable for train+val
+        pass
+    logger.info('Datasets building finished.')
 
     # The default loader config
     loader_cfg = dict(
@@ -122,51 +127,58 @@ def train_model(cfg,
     # The specific dataloader settings
     train_loader_cfg = {**loader_cfg, **cfg.data.get('train_loader', {})}
 
-    data_loaders = [build_dataloader(ds, **train_loader_cfg) for ds in dataset]
+    # A dict of data loaders
+    train_data_loaders = {ds:build_dataloader(datasets[ds], **train_loader_cfg) for ds in datasets}
 
+    logger.info('Dataloader building finished.')
     # put model on gpus
     if distributed:
         find_unused_parameters = cfg.get('find_unused_parameters', False)
         # Sets the `find_unused_parameters` parameter in
         # torch.nn.parallel.DistributedDataParallel
-        model = wrap_distributed_model(
-            model,
-            cfg.device,
-            broadcast_buffers=False,
-            find_unused_parameters=find_unused_parameters)
+        for model_name in models:
+            if model_name == 'w' or 'm_' in model_name: # consider how to derive the w
+                continue
+            models[model_name] = wrap_distributed_model(
+                models[model_name],
+                cfg.device,
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
     else:
-        model = wrap_non_distributed_model(
-            model, cfg.device, device_ids=cfg.gpu_ids)
+        for model_name in models:
+            models[model_name] = wrap_non_distributed_model(
+                models[model_name], cfg.device, device_ids=cfg.gpu_ids)
 
-    # build runner
-    optimizer = build_optimizer(model, cfg.optimizer)
+
+    # build optimizer, a dict
+    optims = build_optimizers(models, cfg.optim)
 
     if cfg.get('runner') is None:
         cfg.runner = {
-            'type': 'EpochBasedRunner',
-            'max_epochs': cfg.total_epochs
+            'type': 'NC',
+            'max_epochs': cfg.max_epochs
         }
         warnings.warn(
             'config is now expected to have a `runner` section, '
             'please set `runner` in your config.', UserWarning)
+    runner_args = {key:cfg.runner[key] for key in cfg.runner}
 
-    runner = build_runner(
-        cfg.runner,
-        default_args=dict(
-            model=model,
-            batch_processor=None,
-            optimizer=optimizer,
-            work_dir=cfg.work_dir,
-            logger=logger,
-            meta=meta))
-
-    # an ugly walkaround to make the .log and .log.json filenames the same
-    runner.timestamp = timestamp
-
+    runner_args.update({
+            'models':models,
+            'losses':losses,
+            'optims':optims,
+            'logger':logger,
+            'work_dir':cfg.work_dir,
+            'meta':meta
+        })
+    
+    runner = build_runner(runner_args)
     
     # register eval hooks
     if validate:
-        val_dataset = build_dataset(cfg.data.val, dict(test_mode=True))
+        # build datasets
+        val_datasets = build_datasets(cfg.data.val)  # A dict of datasets
+
         # The specific dataloader settings
         val_loader_cfg = {
             **loader_cfg,
@@ -175,11 +187,11 @@ def train_model(cfg,
             'drop_last': False,  # Not drop last by default
             **cfg.data.get('val_dataloader', {}),
         }
-        val_dataloader = build_dataloader(val_dataset, **val_loader_cfg)
+        val_data_loaders = {ds:build_dataloader(datasets[ds], **val_loader_cfg) for ds in datasets}
         
-
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-    runner.run(data_loaders, cfg.workflow)
+    runner.run(cfg.data.train.type, 
+               train_data_loaders, val_data_loaders, cfg.workflow)

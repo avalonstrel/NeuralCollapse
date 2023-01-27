@@ -1,10 +1,11 @@
 import torch
+from abc import abstractmethod
 
 class Runner:
     """
     """
     def __init__(self,):
-        pass
+        self._model_name = 'Runner'
 
     @property
     def model_name(self) -> str:

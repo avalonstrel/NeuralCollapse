@@ -1,23 +1,59 @@
-device:
-gpu_ids:
-work_dir: 
-# resume first then load
-resume_from:
-load_from:
+# whole training setting
+seed: 97
+device: 'cuda'
+gpu_ids: [0]
+workflow: 'train'
+work_dir: './exprs/cifar10'
+max_epochs: 200
 log_level: INFO
-dist_params: None
-runner:
-  type:
-optimizer:
-  type:
-model:
+# dist_params: 
 
+# resume first then load
+# resume_from: '/home/lhy/Projects/GeneralTransfer/exprs/cifar_tuberlin/20230123/chckpoints/iter_5.pth'
+resume_from: ''
+load_from: ''
+
+
+runner:
+  type: 'NC'
+  print_every: 5
+  val_every: 5
+  save_every: 5
+  sample_size: 500
+model:
+  type: ['image']
+  num_classes: 10
+loss:
+  type: ['CE']
+optim:
+  type: AdamW
+  lr: 0.001
+  weight_decay: 0.01
 data:
-  workers_per_gpu: 1
+  samples_per_gpu: 128 #batch size
+  workers_per_gpu: 2
   train:
+    type: ['cifar10']
+    root: ['/home/lhy/datasets/CIFAR10']
+    resized_size: [[224,224]]
+    transforms: [
+                  ['RandomResizedCrop', 'RandomHorizontalFlip', 'RandomVerticalFlip', 'ToTensor'],
+                ]
   val:
-  test:
-  train_loader:
-  val_loader:
-  test_loader:
-  sampler:
+    type: ['cifar10']
+    root: ['/home/lhy/datasets/CIFAR10']
+    resized_size: [[224,224]]
+    transforms: [
+                  ['Resize',  'ToTensor'],
+                ]
+  test: 
+    type: ['cifar10']
+    root: ['/home/lhy/datasets/CIFAR10']
+    resized_size: [[224,224]]
+    transforms: [
+                  ['Resize',  'ToTensor'],
+                ]
+  # train_loader: ''
+  # val_loader: ''
+  # test_loader: ''
+# sampler:
