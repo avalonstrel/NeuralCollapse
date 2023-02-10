@@ -98,7 +98,7 @@ def train_model(cfg,
     losses = build_losses(cfg.loss)
 
     logger.info('Models and losses building finished.')
-
+    logger.info(f'Model Summary: {models}')
     # build datasets
     datasets = build_datasets(cfg.data.train)  # A dict of datasets
     if len(cfg.workflow) == 2:
@@ -169,6 +169,7 @@ def train_model(cfg,
             'optims':optims,
             'logger':logger,
             'work_dir':cfg.work_dir,
+            'max_epochs':cfg.max_epochs,
             'meta':meta
         })
     

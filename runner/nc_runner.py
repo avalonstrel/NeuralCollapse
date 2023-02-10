@@ -9,6 +9,8 @@ from utils.evaluation import AverageMeter, accuracy, fuzziness
 
 class NCRunner:
     """The runner for Checking Neural Collapse for each layer of neural network.
+       Actually, it just works as a classification runner not specific for neural collapse yet. 
+       (The analysis will in analysis.py)
         Args:
             
     """
@@ -85,6 +87,8 @@ class NCRunner:
 
     def initialize_metrics_dict(self):
         metrics_names = ['loss', 'acc1', 'acc5']
+        if hasattr(self.models['cls'], 'nfe'):
+            metrics_names.extend(['f_nfe', 'b_nfe'])
         metrics_dict = {metric:AverageMeter() for metric in metrics_names}
         records = {'conv':[], 'bn':[], 'relu':[]}
         return metrics_names, metrics_dict, records
@@ -94,7 +98,7 @@ class NCRunner:
         epoch_message = f'Epoch[{epoch_i+1}/{self._max_epochs}], Iter[{iter_i+1}/{self._each_iters}]'
         cur_lrs = self.current_lr()
         cur_lr = list(cur_lrs.values())[0][0]
-        optim_message = f'cur_lr:{cur_lr:.4f}'
+        optim_message = f'cur_lr:{cur_lr:.7f}'
         whole_message = tag + ' ' + epoch_message + ' (' + optim_message + ') :' + metrics_message
         self.logger.info(whole_message)
 
@@ -104,12 +108,13 @@ class NCRunner:
         device = next(classifier.parameters()).device
         # get data    
         in_data, label = [dterm.to(device) for dterm in data_batch]
-        pred, aux_outs = classifier(in_data)
+        # pred, aux_outs = classifier(in_data, None)
+        pred = classifier(in_data)
 
         loss_val = self.losses['cls'](pred, label)
         if return_input:
-            return in_data, label, pred, aux_outs, loss_val
-        return pred, aux_outs, loss_val
+            return in_data, label, pred, loss_val
+        return pred, loss_val
 
     def compute_fuzziness(self, sampled_outs, sampled_labels):
         combined_labels = torch.cat(sampled_labels)
@@ -146,32 +151,28 @@ class NCRunner:
         # Info 
         metrics_names, metrics_dict, records = self.initialize_metrics_dict()
         whole_iter_i = 1
-
+        is_odenet = hasattr(self.models['cls'], 'nfe')
         for epoch_i in range(self._max_epochs):
             for iter_i, data_batch in enumerate(train_data_loader):
                 # zero cls optimizer grad
                 self.optims['cls'].zero_grad()
 
                 # forward loss
-                in_data, label, pred, aux_outs, loss_val = self.forward_loss(data_batch, return_input=True)
-
+                in_data, label, pred, loss_val = self.forward_loss(data_batch, return_input=True)
+                if is_odenet:
+                    nfe_forward = self.models['cls'].nfe
+                    self.models['cls'].nfe = 0
                 loss_val.backward()
 
                 self.optims['cls'].step()
+                if is_odenet:
+                    nfe_backward = self.models['cls'].nfe
+                    self.models['cls'].nfe = 0
 
                 # Display and Save
                 if self._rank == 0:
                     if whole_iter_i % self._print_every == 0:
                         with torch.no_grad():
-                            sampled_outs, sampled_labels = {'conv':[], 'bn':[], 'relu':[]}, []
-                            for sample_data_batch in sampled_data:
-                                tmp_in_data, tmp_label, tmp_pred, tmp_aux_outs, loss_val_ = self.forward_loss(sample_data_batch, return_input=True)
-                                for sn in sampled_outs:
-                                    sampled_outs[sn].append(tmp_aux_outs[sn])
-                                sampled_labels.append(tmp_label)
-
-                            # fuzzs:{'conv':[layer1,2,...], 'bn':[layer1,2,...], 'relu':[layer1,2,...], }
-                            fuzzs = self.compute_fuzziness(sampled_outs, sampled_labels)
 
                             # update metrics
                             accs = accuracy(pred, label, topk=(1,5))
@@ -179,10 +180,9 @@ class NCRunner:
                             metrics_dict['acc1'].update(accs[1], pred.size(0))
                             metrics_dict['acc5'].update(accs[5], pred.size(0))
                             metrics_dict_val = {mn:metrics_dict[mn].val for mn in metrics_names}
-                            
-                            # update records
-                            for rn in records:
-                                records[rn].append((whole_iter_i, fuzzs[rn]))
+                            if is_odenet:
+                                metrics_dict['f_nfe'].update(nfe_forward)
+                                metrics_dict['b_nfe'].update(nfe_backward)
 
                             self.display_info('Train', epoch_i, iter_i, metrics_names, metrics_dict_val)
                         
@@ -191,9 +191,9 @@ class NCRunner:
                         
                     if whole_iter_i % self._save_every == 0:
                         # save records
-                        record_dir = os.path.join(self.work_dir, 'records')
-                        os.makedirs(record_dir, exist_ok=True)
-                        torch.save(records, os.path.join(record_dir, f'iter_{whole_iter_i}.pth'))
+                        # record_dir = os.path.join(self.work_dir, 'records')
+                        # os.makedirs(record_dir, exist_ok=True)
+                        # torch.save(records, os.path.join(record_dir, f'iter_{whole_iter_i}.pth'))
                         # save checkpoints
                         self.save_checkpoint(self.work_dir, f'iter_{whole_iter_i}.pth') 
                         
@@ -210,7 +210,7 @@ class NCRunner:
         with torch.no_grad():
             for iter_i, data_batch in enumerate(val_data_loader):
                 # forward loss
-                in_data, label, pred, aux_outs, loss_val = self.forward_loss(data_batch, return_input=True)
+                in_data, label, pred, loss_val = self.forward_loss(data_batch, return_input=True)
                 accs = accuracy(pred, label, topk=(1,5))
                 metrics_dict['loss'].update(loss_val.detach().cpu().item(), pred.size(0))
                 metrics_dict['acc1'].update(accs[1], pred.size(0))
@@ -286,7 +286,7 @@ class NCRunner:
     def save_checkpoint(self,
                         out_dir,
                         filename_tmpl,
-                        save_optimizer = True,
+                        save_optimizer = False,
                         meta = None,) -> None:
         
         os.makedirs(os.path.join(out_dir, 'chckpoints'), exist_ok=True)
@@ -332,7 +332,7 @@ class NCRunner:
 
     def resume(self,
                checkpoint,
-               resume_optimizer = True,
+               resume_optimizer = False,
                map_location = 'default'):
         if map_location == 'default':
             if torch.cuda.is_available():
@@ -354,7 +354,7 @@ class NCRunner:
 
 
         # optimizer
-        if 'optims' in checkpoint:
+        if 'optims' in checkpoint and resume_optimizer:
             for optim in self.optims:
                 self.optims[optim].load_state_dict(checkpoint['optims'][optim])
 

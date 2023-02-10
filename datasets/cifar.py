@@ -84,9 +84,16 @@ class CIFAR10(BaseDataset):
         self.imgs = self.imgs.transpose((0, 2, 3, 1))  # convert to HWC
 
         self._load_meta()
-
+        data_count = {}
+        max_num = 100
         data_infos = []
         for img, gt_label in zip(self.imgs, self.gt_labels):
+            if gt_label in data_count:
+                data_count[gt_label] += 1
+            else:
+                data_count[gt_label] = 1
+            if data_count[gt_label] > max_num:
+                continue
             gt_label = np.array(gt_label, dtype=np.int64)
             info = {'img': img, 'gt_label': gt_label}
             data_infos.append(info)

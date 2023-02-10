@@ -1,9 +1,11 @@
 import torch
-
+import numpy as np
 from models.embeddings import ConvEmbedding
 from models.backbones import ResnetBackbone
 from models.heads import ClsHead
-from models.classifiers import VGGClassifier
+from models.classifiers import (VGGClassifier, ResNetClassifier, InceptionClassifier,
+                                SqueezeNetClassifier, DenseNetClassifier, SENetClassifier, SwinClassifier,
+                                ODEClassifier, ViTClassifier, HybridNetClassifier, HybridODEClassifier)
 
 
 
@@ -14,10 +16,57 @@ def build_models(cfg):
     for model_type in cfg.type:
         if 'vgg' in model_type:
             models['cls'] = VGGClassifier(cfg.num_classes, 
+                                          norm_type=cfg.norm_type,
                                           dropout=cfg.dropout,
                                           model_type=model_type, 
-                                          pretrained=False, 
-                                          )
+                                          pretrained=False)
+        elif 'resnet' in model_type:
+            models['cls'] = ResNetClassifier(cfg.num_classes, 
+                                          model_type=model_type, 
+                                          norm_type=cfg.norm_type,
+                                          pretrained=False)
+        elif 'inception' in model_type:
+            models['cls'] = InceptionClassifier(cfg.num_classes, 
+                                                dropout=cfg.dropout, 
+                                                add_settings=cfg.add_settings,
+                                                pretrained=False)
+        elif 'densenet' in model_type:
+            models['cls'] = DenseNetClassifier(cfg.num_classes, 
+                                                model_type,)
+        elif 'squeezenet' in model_type:
+            models['cls'] = SqueezeNetClassifier(version="1_1", 
+                                                num_classes=cfg.num_classes, 
+                                                dropout=cfg.dropout)
+        elif 'senet' in model_type:
+            models['cls'] = SENetClassifier(cfg.num_classes, 
+                                          model_type=model_type, 
+                                          pretrained=False)
+        
+        elif 'odenet' in model_type:
+            models['cls'] = ODEClassifier(cfg.num_classes, 
+                                          model_type=model_type,
+                                          atol=cfg.atol,
+                                          rtol=cfg.rtol,
+                                          t_list=np.linspace(0, 1, cfg.num_t))
+        elif 'swin' in model_type:
+            models['cls'] = SwinClassifier(cfg.num_classes, 
+                                            model_type)
+        elif 'vit' in model_type:
+            models['cls'] = ViTClassifier(cfg.num_classes, 
+                                            model_type,
+                                            image_size=cfg.image_size)
+        elif 'hybridode' in model_type:
+            models['cls'] = HybridODEClassifier(cfg.num_classes, 
+                                                cfg.structures, 
+                                                image_size=cfg.image_size,
+                                                norm_type=cfg.norm_type,
+                                                atol=cfg.atol,
+                                                rtol=cfg.rtol,)
+        elif 'hybrid' in model_type:
+            models['cls'] = HybridNetClassifier(cfg.num_classes, 
+                                                cfg.structures, 
+                                                image_size=cfg.image_size,
+                                                norm_type=cfg.norm_type)
         else:
             raise ValueError(f'Unrecognized model type {model_type}')
 

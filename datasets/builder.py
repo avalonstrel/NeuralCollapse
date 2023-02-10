@@ -40,7 +40,8 @@ def build_datasets(cfg, default_args=None):
     for data_type, root, trans_list, resized_size in zip(cfg.type, cfg.root, cfg.transforms, cfg.resized_size):
         trans_kwargs = {
             'RandomResizedCrop':{'size':resized_size},
-            'Resize':{'size':resized_size}
+            'Resize':{'size':resized_size},
+            'Normalize':{'mean':(0.4914, 0.4822, 0.4465), 'std':(0.247, 0.243, 0.261)}
         }
         if data_type == 'cifar10':
              dataset = CIFAR10(
@@ -75,7 +76,7 @@ def build_dataloader(dataset,
                      shuffle=True,
                      drop_last=False,
                      seed=None,
-                     pin_memory=True,
+                     pin_memory=False,
                      persistent_workers=True,
                      sampler_cfg=None,
                      **kwargs):

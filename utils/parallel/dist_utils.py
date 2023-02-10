@@ -1,7 +1,7 @@
-import cv2
 import os
 import warnings
 
+import cv2
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp

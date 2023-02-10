@@ -1,0 +1,371 @@
+import math
+from functools import partial
+from typing import Any, cast, Callable, List, Optional
+
+import torch
+import torch.nn.functional as F
+from torch import nn, Tensor
+from torchvision.ops import MLP, Permute
+from torchvision.ops.stochastic_depth import StochasticDepth
+
+
+# from .vggnet import make_layers as vgg_layers
+# make_layers(cfg: List[Union[str, int]], input_size: List[int], norm_type: str = 'bn') -> nn.Sequential:
+
+from .resnet import BasicBlock, Bottleneck
+
+from .inception import InceptionA, InceptionB, InceptionC, InceptionD
+
+from .vit import EncoderBlock
+
+from .swintransformer import SwinTransformerBlock, PatchMerging
+
+from .odenet import ODEBlock
+
+NORM_LAYERS = {
+    'bn':nn.BatchNorm2d,
+    'ln':nn.LayerNorm,
+    'in':nn.InstanceNorm2d,
+
+}
+class PreViTTrans(nn.Module):
+    def __init__(self, in_channels, out_channels, in_size, patch_size, dropout=0.):
+        super().__init__()
+        self.patch_size = patch_size
+        self.conv_proj = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=patch_size, stride=patch_size)
+        seq_length = (in_size // patch_size)**2
+        self.pos_embedding = nn.Parameter(torch.empty(1, seq_length, out_channels).normal_(std=0.02))  # from BERT
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        n, c, h, w = x.size()
+        p = self.patch_size
+        n_h = h // p
+        n_w = w // p
+        
+        # (n, c, h, w) -> (n, hidden_dim, n_h, n_w)
+        x = self.conv_proj(x)
+        # print(n,c,h,w,x.size())
+        # (n, hidden_dim, n_h, n_w) -> (n, hidden_dim, (n_h * n_w))
+        x = x.reshape(n, -1, n_h * n_w)
+
+        # (n, hidden_dim, (n_h * n_w)) -> (n, (n_h * n_w), hidden_dim)
+        # The self attention layer expects inputs in the format (N, S, E)
+        # where S is the source sequence length, N is the batch size, E is the
+        # embedding dimension
+        x = x.permute(0, 2, 1)
+        # print(x.size(), )
+        return x + self.pos_embedding
+
+class PostViTTrans(nn.Module):
+    def __init__(self, in_channels, out_channels, dropout=0.):
+        super().__init__()
+        self.conv_proj = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=1)
+
+    def forward(self, x):
+        n, hw, c = x.size()
+        h = w = int(hw**(0.5))
+        x = x.permute(0, 2, 1)
+        x = x.reshape(n, c, h, w)
+
+        x = self.conv_proj(x)
+        # (n, c, h, w) -> (n, c, h, w)
+        return x
+
+
+class PreSwinTrans(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        return x.permute(0, 2, 3, 1)
+
+class PostSwinTrans(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        return x.permute(0, 3, 1, 2)
+
+class NormLayer(nn.Module):
+    def __init__(self, input_size, norm_type='bn'):
+        super().__init__()
+        self.norm_type = norm_type
+        self.norm = None
+        if norm_type == 'bn':
+            self.norm = nn.BatchNorm2d(input_size[0])
+        elif norm_type == 'ln':
+            self.norm = nn.LayerNorm(input_size)
+        elif norm_type == 'in':
+            self.norm = nn.InstanceNorm2d(input_size[0])
+
+    def forward(self, x):
+        if self.norm is not None:
+            x = self.norm(x)
+        return x
+
+def vgg_layers(cfg, norm_type='bn', tmp_inputs=None):
+    layers: List[nn.Module] = []
+    input_size = tmp_inputs.size()[1:]
+    in_channels = input_size[0]
+    for v in cfg:
+        if v == "M":
+            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            tmp_inputs = layers[-1](tmp_inputs)
+        else:
+            v = cast(int, v)
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
+            tmp_inputs = conv2d(tmp_inputs)
+            if norm_type == 'bn':
+                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
+            elif norm_type == 'ln':
+                layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:]), nn.ReLU(inplace=True)]
+            elif norm_type == 'in':
+                layers += [conv2d, nn.InstanceNorm2d(v), nn.ReLU(inplace=True)]
+            else:
+                layers += [conv2d, nn.ReLU(inplace=True)]
+            if norm_type in ['bn', 'ln', 'in']:
+                tmp_inputs = layers[-2](tmp_inputs)
+
+            in_channels = v
+    return nn.Sequential(*layers)
+
+BLOCKS = {
+    'VGGBlock':vgg_layers,
+    'ResBlock':BasicBlock,
+    'ResBottleneck':Bottleneck,
+    'InceptionA':InceptionA,
+    'InceptionB':InceptionB,
+    'InceptionC':InceptionC,
+    'InceptionD':InceptionD,
+    'ViTBlock':EncoderBlock,
+    'SwinBlock':SwinTransformerBlock,
+    'PatchMerging':PatchMerging,
+    'PreViTTrans':PreViTTrans,
+    'PostViTTrans':PostViTTrans,
+    'PreSwinTrans':PreSwinTrans,
+    'PostSwinTrans':PostSwinTrans,
+}
+
+# TEMPLATE_BLOCKS = [
+#     'vgg_layers':(cfg: [64,'M'],  norm_type: 'bn', tmp_inputs),  # Simple CNN Layers
+#     'BasicBlock':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
+#     'Bottleneck':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
+#     'InceptionA':(in_channels: int, pool_features: int),
+#     'InceptionB':(in_channels),
+#     'InceptionC':(in_channels: int, channels_7x7: int),
+#     'InceptionD':(in_channels),
+#     'ViTBlock':(num_heads: int, hidden_dim: int, mlp_dim: int,),
+#     'SwinBlock':(dim: int, num_heads: int, window_size: List[int], shift_size: List[int],),
+#     'PatchMerging':(dim:input C)
+# ]
+# 
+# 
+
+
+class HybridNetClassifier(nn.Module):
+    '''
+    Construct Classifier with different kinds of blocks. 
+    Args:
+        num_classes[int]: the number of classes
+        structures[list]: e.g., [(block_type, args:(a,b,c)), ]
+    '''
+    def __init__(self,
+        num_classes,
+        structures, 
+        image_size=128,
+        norm_type='bn',
+        ):
+        super().__init__()
+        self.image_size = image_size
+        self.num_classes = num_classes
+        self.norm_type = norm_type
+        # for transformer
+        
+        self.build_models(structures)
+
+        self.init_weights()
+
+    def build_models(self, structures):
+        # input conv
+        x = torch.rand(2, 3, self.image_size, self.image_size)
+        tmp_conv = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        x = tmp_conv(x)
+        self.in_conv = nn.Sequential(*[
+                tmp_conv, 
+                NormLayer(x.size()[1:], 'bn'),
+                nn.ReLU(inplace=True)
+            ])
+        # N 64 H W
+        blocks = []
+        pre_transformer = False  # whether the previous block is transformer based block
+        for (block, block_args) in structures:
+            kwargs = {}
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['tmp_inputs'] = x
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['norm_type'] = self.norm_type
+            tmp_block = BLOCKS[block](*block_args, **kwargs)
+            blocks.append(tmp_block)
+            x = tmp_block(x)
+
+        self.blocks = nn.Sequential(*blocks)
+        
+        x = torch.flatten(x, 1)
+        self.fc = nn.Linear(x.size(1), self.num_classes)
+        
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)    
+
+    def get_features(self, x, feat_type='relu'):
+        outputs = []
+        x = self.in_conv(x)
+        outputs.append(x.detach().cpu())
+        for block in self.blocks:
+            x = block(x)
+
+            if isinstance(block, (PreViTTrans, EncoderBlock)):
+                n, hw, c = x.size()
+                h = w = int(hw**(0.5))
+                outputs.append(x.reshape(n, h, w, c).permute(0,3,1,2).detach().cpu())    
+            elif isinstance(block, (PreSwinTrans, SwinTransformerBlock)):
+                outputs.append(x.permute(0,3,1,2).detach().cpu())    
+            else:
+                outputs.append(x.detach().cpu())
+
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        outputs.append(x.detach().cpu())
+        return outputs
+
+    def forward(self, x, onnx=False):
+        x = self.in_conv(x)
+        for block in self.blocks:
+            if isinstance(block, (EncoderBlock, SwinTransformerBlock)):
+                x = block(x, onnx=onnx)
+            else:
+                x = block(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+
+
+class ODEAddWarpper(nn.Module):
+    def __init__(self, block):
+        super().__init__()
+        self.block = block
+
+    def forward(self, t, x):
+        x_t = torch.ones_like(x) * t
+        return self.block(x + x_t)
+
+
+
+class HybridODEClassifier(nn.Module):
+    '''
+    Construct Classifier with different kinds of blocks. 
+    Args:
+        num_classes[int]: the number of classes
+        structures[list]: e.g., [(block_type, args:(a,b,c)), ]
+    '''
+    def __init__(self,
+        num_classes,
+        structures, 
+        image_size=128,
+        norm_type='bn',
+        atol=1e-3, 
+        rtol=1e-3,
+        ):
+        super().__init__()
+        self.image_size = image_size
+        self.num_classes = num_classes
+        self.norm_type = norm_type
+        self.atol = atol
+        self.rtol = rtol
+        # for transformer
+        
+        self.build_models(structures)
+
+        self.init_weights()
+
+    def build_models(self, structures):
+        # input conv
+        x = torch.rand(2, 3, self.image_size, self.image_size)
+        tmp_conv = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        x = tmp_conv(x)
+        self.in_conv = nn.Sequential(*[
+                tmp_conv, 
+                NormLayer(x.size()[1:], 'bn'),
+                nn.ReLU(inplace=True)
+            ])
+        # N 64 H W
+        blocks = []
+        pre_transformer = False  # whether the previous block is transformer based block
+        for (is_ode, block, block_args) in structures:
+            kwargs = {}
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['tmp_inputs'] = x
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['norm_type'] = self.norm_type
+            tmp_block = BLOCKS[block](*block_args, **kwargs)
+            if is_ode:
+                tmp_block = ODEBlock(ODEAddWarpper(tmp_block), atol=self.atol, rtol=self.rtol)
+            blocks.append(tmp_block)
+            x = tmp_block(x)
+
+        self.blocks = nn.Sequential(*blocks)
+        
+        x = torch.flatten(x, 1)
+        self.fc = nn.Linear(x.size(1), self.num_classes)
+        
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)    
+
+    def get_features(self, x, feat_type='relu', t_list=None):
+        outputs = []
+        x = self.in_conv(x)
+        outputs.append(x.detach().cpu())
+        for block in self.blocks:
+            if isinstance(block, ODEBlock):
+                for t_i in range(len(t_list)-1):
+                    x = block(x, t_list[t_i:t_i+2])
+                    outputs.append(x.detach().cpu())
+            else:    
+                x = block(x)
+
+                if isinstance(block, (PreViTTrans, EncoderBlock)):
+                    n, hw, c = x.size()
+                    h = w = int(hw**(0.5))
+                    outputs.append(x.reshape(n, h, w, c).permute(0,3,1,2).detach().cpu())    
+                elif isinstance(block, (PreSwinTrans, SwinTransformerBlock)):
+                    outputs.append(x.permute(0,3,1,2).detach().cpu())    
+                else:
+                    outputs.append(x.detach().cpu())
+
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        outputs.append(x.detach().cpu())
+        return outputs
+
+    def forward(self, x, onnx=False):
+        x = self.in_conv(x)
+        for block in self.blocks:
+            x = block(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+
+
+
+
+

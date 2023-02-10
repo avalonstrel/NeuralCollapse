@@ -22,7 +22,6 @@ TRANSFORMS_DICT = {
 def build_transforms(transfroms_list, trans_kwargs):
      transforms = []
      for trans_name in transfroms_list:
-
           if trans_name in trans_kwargs:
                tmp_trans = TRANSFORMS_DICT[trans_name](**trans_kwargs[trans_name])
           else:

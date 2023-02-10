@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from numbers import Number
-
+import copy
 import numpy as np
 import torch
 from torch.nn.functional import one_hot
@@ -32,48 +32,50 @@ def fuzziness(feats, labels):
     Return:
         fuzziness[float]
     """
-    device = torch.device('cuda:0')
+    device = labels.device
+    
+    feats = copy.deepcopy(feats)
+    labels = copy.deepcopy(labels)
     feats = feats.reshape(feats.size(0), -1)  # [N x C]
-    C = 256
-    feats = feats[:, :C].to(device)
-    # compute mean
-    feat_means = {}  #{0:[C], 1:[C], 2:[C], ...}
-    for idx, label in enumerate(labels):
-        label_ = int(label.item())
-        if label_ in feat_means:
-            feat_means[label_].append(feats[idx])
-        else:
-            feat_means[label_] = []
+    C = feats.size(1)
+
+    feats = feats.to(device)
 
     whole_feat_mean = feats.mean(dim=0)  # [C]
 
-    # between class signal
-    # C = feats.size(1)
+    feats = feats - whole_feat_mean.view(1, -1)
+    
+    # compute mean
+    class_idxs = list(range(10))
+    feat_means = [[] for _ in class_idxs]  #{0:[C], 1:[C], 2:[C], ...}
+    for idx, label in enumerate(labels):
+        label_ = int(label.item())
+        feat_means[label_].append(feats[idx])
     
     signal_b = torch.zeros(C, C).to(device)
     signal_w = torch.zeros(C, C).to(device)
-    for k in feat_means:
-        feat_mean = sum(feat_means[k]) / len(feat_means[k])
-        diff_b = feat_mean - whole_feat_mean
-        # clamp
-        # diff_b = diff_b[:C]
+    for k in class_idxs:
+        class_feats = torch.stack(feat_means[k])
+        feat_mean = class_feats.mean(dim=0)
+        
+        diff_b = feat_mean #- whole_feat_mean
+        tmp_test = torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1))
+        
         signal_b = signal_b + \
-                    len(feat_means[k]) * torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1))
-        for feat in feat_means[k]:
-            diff_w = feat - feat_mean
-            # diff_w = diff_w[:C]
-            signal_w = signal_w + torch.matmul(diff_w.reshape(-1, 1), diff_w.reshape(1, -1))
+                      torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1)) * len(feat_means[k])
+       
+        diff_w =  class_feats - feat_mean.view(1, -1)
+        # diff_w = diff_w[:C]
+        signal_w = signal_w + torch.matmul(torch.transpose(diff_w, 0, 1), diff_w)
 
-    signal_b = signal_b / feats.size(0)
-    signal_w = signal_w / feats.size(0)
+    signal_b = signal_b / float(feats.size(0))
+    signal_w = signal_w / float(feats.size(0))
+    inv_signal_b = torch.linalg.pinv(signal_b, rcond=1e-5)
 
-    D_seperation = torch.trace(torch.matmul(signal_w, torch.linalg.pinv(signal_b)))
+    D_seperation = torch.trace(torch.matmul(signal_w, inv_signal_b))
+
+    return D_seperation, signal_b, signal_w
     
-    return D_seperation
-
-    
-
-
 
 
 def calculate_confusion_matrix(pred, target):

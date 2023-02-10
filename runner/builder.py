@@ -24,7 +24,7 @@ def build_optimizers(models, cfg):
     assert cfg['type'] in OPTIMIZER_DICT, 'Unsupported optimizer {}.'.format(cfg['type'])
     optims = {}
     optim_args = {key:cfg[key] for key in cfg if key not in ['type']}
-
+    
     for key in models:
         optims[key] = OPTIMIZER_DICT[cfg.type](models[key].parameters(), **optim_args)
     return optims
