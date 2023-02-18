@@ -217,13 +217,12 @@ class NormLayer(nn.Module):
 class ResNetClassifier(nn.Module):
     def __init__(
         self,
-        num_classes, model_type='resnet50',  norm_type='bn', pretrained=False,
+        num_classes, model_type='resnet50', image_size=32,  norm_type='bn', pretrained=False,
     ) -> None:
         super().__init__()
 
-        tmp_inputs = torch.rand(2, 3, 32, 32)  # just for layer norm size
-        if norm_type == 'in':
-            tmp_inputs = torch.rand(2, 3, 64, 64)
+        tmp_inputs = torch.rand(2, 3, image_size, image_size)  # just for layer norm size
+        
         block, layers = KWARGS_DICT[model_type]
         # Some default parameters
         zero_init_residual = False
@@ -385,7 +384,7 @@ class ResNetClassifier(nn.Module):
                     feats.append(layer_feats[-1]) 
             else:
                 x = layer(x)
-                
+
         for layer in self.layer4:
             if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
                 x, layer_feats = layer.get_features(x)

@@ -39,7 +39,8 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
                  target_transforms=None,
                  classes=None,
                  ann_file=None,
-                 test_mode=False):
+                 test_mode=False,
+                 max_class_num=None):
         super(BaseDataset, self).__init__()
         self.root = expanduser(root)
         if transforms is None:
@@ -51,8 +52,11 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         self.CLASSES = self.get_classes(classes)
         self.ann_file = expanduser(ann_file)
         self.test_mode = test_mode
+        if max_class_num is not None:
+            self.max_class_num = max_class_num
         self.data_infos = self.load_annotations()
-
+        
+        
     @abstractmethod
     def load_annotations(self):
         pass

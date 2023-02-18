@@ -120,12 +120,14 @@ class LODEfunc(nn.Module):
         return out
 
 class ODEBlock(nn.Module):
-    def __init__(self, odefunc, atol=1e-3, rtol=1e-3):
+    def __init__(self, odefunc, atol=1e-3, rtol=1e-3, method=None):
         super(ODEBlock, self).__init__()
         self.odefunc = odefunc
         self.integration_time = torch.tensor([0, 1]).float()  # default 0, 1 
         self.atol = atol
         self.rtol = rtol
+        self.method = method
+
     def forward(self, x, t=None, atol=None, rtol=None, return_all=False):
         if t is None:
             integration_time = self.integration_time.type_as(x)
@@ -135,7 +137,7 @@ class ODEBlock(nn.Module):
             atol = self.atol
         if rtol is None:
             rtol = self.rtol
-        out = odeint(self.odefunc, x, integration_time, rtol=rtol, atol=atol)
+        out = odeint(self.odefunc, x, integration_time, rtol=rtol, atol=atol, method=self.method)
         if return_all:
             return out
         else:
@@ -165,7 +167,7 @@ ODEFUNC_DICT = {
 }
 
 class ODEClassifier(nn.Module):
-    def __init__(self, num_classes, model_type, atol=1e-3, rtol=1e-3, t_list=[0,1]):
+    def __init__(self, num_classes, model_type, atol=1e-3, rtol=1e-3, t_list=[0,1], method=None):
         super().__init__()
 
         # Input / Downsampling Layers
@@ -188,10 +190,11 @@ class ODEClassifier(nn.Module):
         self.downsampling_layers = nn.Sequential(*downsampling_layers)
         # Features Layers(ODE)
         # feature_layers = ODEBlock(ODEfunc(64), t_list)
-        self.feature_layers = ODEBlock(ODEFUNC_DICT[model_type](64), atol=atol, rtol=rtol)
+        self.feature_layers = ODEBlock(ODEFUNC_DICT[model_type](64), atol=atol, rtol=rtol, method=method)
         fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, num_classes)]
         self.fc_layers = nn.Sequential(*fc_layers)
         self.t_list = t_list
+        self.method = method
 
     def get_features(self, x, feat_type=None, t_list=None):
         outputs = []

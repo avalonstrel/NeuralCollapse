@@ -22,6 +22,7 @@ class InceptionClassifier(nn.Module):
         inception_blocks = None,
         init_weights = True,
         dropout: float = 0.5,
+        image_size = 32,
         add_settings = (0,0),
     ) -> None:
         super().__init__()
@@ -29,6 +30,8 @@ class InceptionClassifier(nn.Module):
             inception_blocks = [BasicConv2d, InceptionA, InceptionB, InceptionC, InceptionD, InceptionE, InceptionAux]
         if len(inception_blocks) != 7:
             raise ValueError(f"length of inception_blocks should be 7 instead of {len(inception_blocks)}")
+        tmp_inputs = torch.randn(2, 3, image_size, image_size)
+        self.image_size = image_size
         conv_block = inception_blocks[0]
         inception_a = inception_blocks[1]
         inception_b = inception_blocks[2]
@@ -40,43 +43,64 @@ class InceptionClassifier(nn.Module):
         self.aux_logits = aux_logits
         self.transform_input = transform_input
         self.Conv2d_1a_3x3 = conv_block(3, 32, kernel_size=3, stride=2)
+        tmp_inputs = self.Conv2d_1a_3x3(tmp_inputs)
         self.Conv2d_2a_3x3 = conv_block(32, 32, kernel_size=3)
+        tmp_inputs = self.Conv2d_2a_3x3(tmp_inputs)
         self.Conv2d_2b_3x3 = conv_block(32, 64, kernel_size=3, padding=1)
+        tmp_inputs = self.Conv2d_2b_3x3(tmp_inputs)
         self.maxpool1 = nn.MaxPool2d(kernel_size=3, stride=2)
+        tmp_inputs = self.maxpool1(tmp_inputs)
         self.Conv2d_3b_1x1 = conv_block(64, 80, kernel_size=1)
+        tmp_inputs = self.Conv2d_3b_1x1(tmp_inputs)
         self.Conv2d_4a_3x3 = conv_block(80, 192, kernel_size=3)
+        tmp_inputs = self.Conv2d_4a_3x3(tmp_inputs)
+
+        
         if add_settings[0] > 0:
             self.add_convs = nn.Sequential(*[
                     conv_block(192, 192, kernel_size=1)
                     for _ in range(add_settings[0])
                 ])
+            tmp_inputs = self.add_convs(tmp_inputs)
+
         self.maxpool2 = nn.MaxPool2d(kernel_size=3, stride=2)
+        tmp_inputs = self.maxpool2(tmp_inputs)
         self.Mixed_5b = inception_a(192, pool_features=32)
+        tmp_inputs = self.Mixed_5b(tmp_inputs)
         self.Mixed_5c = inception_a(256, pool_features=64)
+        tmp_inputs = self.Mixed_5c(tmp_inputs)
         self.Mixed_5d = inception_a(288, pool_features=64)
+        tmp_inputs = self.Mixed_5d(tmp_inputs)
         if add_settings[1] > 0:
             self.add_inceptions = nn.Sequential(*[
                     inception_a(288, pool_features=64)
                     for i in range(add_settings[1])
                 ])
-        # self.Mixed_6a = inception_b(288)
-        # self.Mixed_6b = inception_c(768, channels_7x7=128)
-        # self.Mixed_6c = inception_c(768, channels_7x7=160)
-        # self.Mixed_6d = inception_c(768, channels_7x7=160)
-        # self.Mixed_6e = inception_c(768, channels_7x7=192)
+            tmp_inputs = self.add_inceptions(tmp_inputs)
+        self.Mixed_6a = inception_b(288)
+        tmp_inputs = self.Mixed_6a(tmp_inputs)
+        self.Mixed_6b = inception_c(768, channels_7x7=128)
+        tmp_inputs = self.Mixed_6b(tmp_inputs)
+        self.Mixed_6c = inception_c(768, channels_7x7=160)
+        tmp_inputs = self.Mixed_6c(tmp_inputs)
+        self.Mixed_6d = inception_c(768, channels_7x7=160)
+        tmp_inputs = self.Mixed_6d(tmp_inputs)
+        self.Mixed_6e = inception_c(768, channels_7x7=192)
+        tmp_inputs = self.Mixed_6e(tmp_inputs)
 
-        self.AuxLogits: Optional[nn.Module] = None
-        if aux_logits:
-            self.AuxLogits = inception_aux(768, num_classes)
-        # self.Mixed_7a = inception_d(768)
-        # self.Mixed_7b = inception_e(1280)
-        # self.Mixed_7c = inception_e(2048)
+        self.Mixed_7a = inception_d(768)
+        tmp_inputs = self.Mixed_7a(tmp_inputs)
+        self.Mixed_7b = inception_e(1280)
+        tmp_inputs = self.Mixed_7b(tmp_inputs)
+        self.Mixed_7c = inception_e(2048)
+        tmp_inputs = self.Mixed_7c(tmp_inputs)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        tmp_inputs = self.avgpool(tmp_inputs)
         self.dropout = nn.Dropout(p=dropout)
-        if pretrained:
-            self.fc = nn.Linear(288, 1000)
-        else:
-            self.fc = nn.Linear(288, num_classes)
+        tmp_inputs = self.dropout(tmp_inputs)
+        
+        tmp_inputs = torch.flatten(tmp_inputs, 1)
+        self.fc = nn.Linear(tmp_inputs.size(1), num_classes)
         if init_weights:
             for m in self.modules():
                 if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -113,6 +137,7 @@ class InceptionClassifier(nn.Module):
         x = self.Conv2d_4a_3x3(x)
         if self.add_settings[0] > 0:
             x = self.add_convs(x)
+        
         # N x 192 x 71 x 71
         x = self.maxpool2(x)
         # N x 192 x 35 x 35
@@ -123,31 +148,29 @@ class InceptionClassifier(nn.Module):
         x = self.Mixed_5d(x)
         if self.add_settings[1] > 0:
             x = self.add_inceptions(x)
-        # N x 288 x 35 x 35
-        # x = self.Mixed_6a(x)
-        # # N x 768 x 17 x 17
-        # x = self.Mixed_6b(x)
-        # # N x 768 x 17 x 17
-        # x = self.Mixed_6c(x)
-        # # N x 768 x 17 x 17
-        # x = self.Mixed_6d(x)
-        # # N x 768 x 17 x 17
-        # x = self.Mixed_6e(x)
-        # # N x 768 x 17 x 17
-        # aux = None
-        # if self.AuxLogits is not None:
-        #     if self.training:
-        #         aux = self.AuxLogits(x)
-        # # N x 768 x 17 x 17
-        # x = self.Mixed_7a(x)
-        # # N x 1280 x 8 x 8
-        # x = self.Mixed_7b(x)
-        # # N x 2048 x 8 x 8
-        # x = self.Mixed_7c(x)
-        # print(x.size())
+        if self.image_size > 32:
+            # N x 288 x 35 x 35
+            x = self.Mixed_6a(x)
+            # N x 768 x 17 x 17
+            x = self.Mixed_6b(x)
+            # N x 768 x 17 x 17
+            x = self.Mixed_6c(x)
+            # N x 768 x 17 x 17
+            x = self.Mixed_6d(x)
+            # N x 768 x 17 x 17
+            x = self.Mixed_6e(x)
+            # N x 768 x 17 x 17
+        if self.image_size > 64:
+            # N x 768 x 17 x 17
+            x = self.Mixed_7a(x)
+            # N x 1280 x 8 x 8
+            x = self.Mixed_7b(x)
+            # N x 2048 x 8 x 8
+            x = self.Mixed_7c(x)
+        
         # N x 2048 x 8 x 8
         # Adaptive average pooling
-        # x = self.avgpool(x)
+        x = self.avgpool(x)
         # N x 2048 x 1 x 1
         x = self.dropout(x)
         # N x 2048 x 1 x 1
@@ -205,6 +228,37 @@ class InceptionClassifier(nn.Module):
             for layer in self.add_inceptions:
                 x = layer(x)
                 outputs.append(x.detach().cpu())
+        if self.image_size > 32:
+            # N x 288 x 35 x 35
+            x = self.Mixed_6a(x)
+            outputs.append(x.detach().cpu())
+            # N x 768 x 17 x 17
+            x = self.Mixed_6b(x)
+            outputs.append(x.detach().cpu())
+            # N x 768 x 17 x 17
+            x = self.Mixed_6c(x)
+            outputs.append(x.detach().cpu())
+            # N x 768 x 17 x 17
+            x = self.Mixed_6d(x)
+            outputs.append(x.detach().cpu())
+            # N x 768 x 17 x 17
+            x = self.Mixed_6e(x)
+            outputs.append(x.detach().cpu())
+            # N x 768 x 17 x 17
+        if self.image_size > 64:
+            # N x 768 x 17 x 17
+            x = self.Mixed_7a(x)
+            outputs.append(x.detach().cpu())
+            # N x 1280 x 8 x 8
+            x = self.Mixed_7b(x)
+            outputs.append(x.detach().cpu())
+            # N x 2048 x 8 x 8
+            x = self.Mixed_7c(x)
+            outputs.append(x.detach().cpu())
+        x = self.avgpool(x)
+        outputs.append(x.detach().cpu())
+        # N x 2048 x 1 x 1
+        x = self.dropout(x)
         # N x 288 x 1 x 1
         x = torch.flatten(x, 1)
         # N x 2048

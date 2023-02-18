@@ -2,16 +2,18 @@ import torch
 
 from .optimizer import SGD, Adam, AdamW
 from .nc_runner import NCRunner
+from .ncssl_runner import NCSSLRunner
 
 
 OPTIMIZER_DICT = {
     'SGD':SGD,
     'Adam':Adam,
-    'AdamW':AdamW
+    'AdamW':AdamW,
 }
 
 RUNNER_DICT = {
-    'NC':NCRunner
+    'NC':NCRunner,
+    'NCSSL':NCSSLRunner,
 }
 def build_optimizers(models, cfg):
     """Build an optimizer accroding to the cfg.

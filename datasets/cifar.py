@@ -86,6 +86,9 @@ class CIFAR10(BaseDataset):
         self._load_meta()
         data_count = {}
         max_num = 100
+        if hasattr(self, 'max_class_num'):
+            max_num = self.max_class_num
+        
         data_infos = []
         for img, gt_label in zip(self.imgs, self.gt_labels):
             if gt_label in data_count:

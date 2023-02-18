@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from datasets.transforms import build_transforms
 from datasets.samplers import build_sampler
 from .cifar import CIFAR10, CIFAR100
-
+from .imagnet import ImageNet
 
 def worker_init_fn(worker_id, num_workers, rank, seed):
     # The seed of each worker equals to
@@ -36,7 +36,9 @@ def build_datasets(cfg, default_args=None):
 
     if default_args is None:
         default_args = {}
-
+    for key in ['max_class_num']:
+        if key in cfg:
+            default_args[key] = cfg[key]
     for data_type, root, trans_list, resized_size in zip(cfg.type, cfg.root, cfg.transforms, cfg.resized_size):
         trans_kwargs = {
             'RandomResizedCrop':{'size':resized_size},
@@ -48,8 +50,13 @@ def build_datasets(cfg, default_args=None):
                 root=root,
                 transforms=build_transforms(trans_list, trans_kwargs),
                 **default_args)
-        if data_type == 'cifar100':
+        elif data_type == 'cifar100':
              dataset = CIFAR100(
+                root=root,
+                transforms=build_transforms(trans_list, trans_kwargs),
+                **default_args)
+        elif data_type == 'imagenet':
+             dataset = ImageNet(
                 root=root,
                 transforms=build_transforms(trans_list, trans_kwargs),
                 **default_args)

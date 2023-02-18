@@ -15,19 +15,31 @@ def build_models(cfg):
     models = {}
     for model_type in cfg.type:
         if 'vgg' in model_type:
+            no_mean = False
+            no_var = False
+            if hasattr(cfg, 'no_mean'):
+                no_mean = cfg.no_mean
+            if hasattr(cfg, 'no_var'):
+                no_var = cfg.no_var
+            print(cfg)
             models['cls'] = VGGClassifier(cfg.num_classes, 
                                           norm_type=cfg.norm_type,
                                           dropout=cfg.dropout,
+                                          image_size=cfg.image_size,
                                           model_type=model_type, 
+                                          no_mean=no_mean,
+                                          no_var=no_var,
                                           pretrained=False)
         elif 'resnet' in model_type:
             models['cls'] = ResNetClassifier(cfg.num_classes, 
                                           model_type=model_type, 
+                                          image_size=cfg.image_size,
                                           norm_type=cfg.norm_type,
                                           pretrained=False)
         elif 'inception' in model_type:
             models['cls'] = InceptionClassifier(cfg.num_classes, 
                                                 dropout=cfg.dropout, 
+                                                image_size=cfg.image_size,
                                                 add_settings=cfg.add_settings,
                                                 pretrained=False)
         elif 'densenet' in model_type:
@@ -41,13 +53,16 @@ def build_models(cfg):
             models['cls'] = SENetClassifier(cfg.num_classes, 
                                           model_type=model_type, 
                                           pretrained=False)
-        
         elif 'odenet' in model_type:
+            method = None
+            if hasattr(cfg, 'method'):
+                method = cfg.method
             models['cls'] = ODEClassifier(cfg.num_classes, 
                                           model_type=model_type,
                                           atol=cfg.atol,
                                           rtol=cfg.rtol,
-                                          t_list=np.linspace(0, 1, cfg.num_t))
+                                          t_list=np.linspace(0, 1, cfg.num_t),
+                                          method=method)
         elif 'swin' in model_type:
             models['cls'] = SwinClassifier(cfg.num_classes, 
                                             model_type)

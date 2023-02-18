@@ -13,7 +13,7 @@ from .hybridnet import HybridNetClassifier, HybridODEClassifier
 __all__ = [
     'VGGClassifier', 'ResNetClassifier', 'InceptionClassifier',
     'SqueezeNetClassifier', 'DenseNetClasssifier', 'SENetClassifier',
-    'SwinClassifier', 'MobileNetClassifier', 'ODEClassifier', 'ViTClassifir',
+    'SwinClassifier', 'MobileNetClassifier', 'ODEClassifier', 'ViTClassifier',
     'HybridNetClassifier', 'HybridODEClassifier'
 ]
 
