@@ -4,6 +4,7 @@ from torchvision.transforms import (Compose, CenterCrop, ColorJitter, Normalize,
                          RandomCrop, RandomGrayscale, RandomResizedCrop, 
                          RandomHorizontalFlip, RandomVerticalFlip, Resize, ToTensor)
 
+from .simclr_transforms import SimCLRTransforms
 
 TRANSFORMS_DICT = {
      'CenterCrop':CenterCrop,
@@ -17,6 +18,7 @@ TRANSFORMS_DICT = {
      'RandomVerticalFlip':RandomVerticalFlip,
      'Resize':Resize,
      'ToTensor':ToTensor,
+     'SimCLR': SimCLRTransforms,
 }
 
 def build_transforms(transfroms_list, trans_kwargs):

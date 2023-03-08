@@ -17,11 +17,12 @@ class ContrastiveLearningDataset:
                                               transforms.RandomHorizontalFlip(),
                                               transforms.RandomApply([color_jitter], p=0.8),
                                               transforms.RandomGrayscale(p=0.2),
-                                              GaussianBlur(kernel_size=int(0.1 * size)),
+                                              transforms.GaussianBlur(kernel_size=int(0.1 * size)),
                                               transforms.ToTensor()])
         return data_transforms
 
     def get_dataset(self, name, n_views):
+        print(self.root_folder)
         valid_datasets = {'cifar10': lambda: datasets.CIFAR10(self.root_folder, train=True,
                                                               transform=ContrastiveLearningViewGenerator(
                                                                   self.get_simclr_pipeline_transform(32),

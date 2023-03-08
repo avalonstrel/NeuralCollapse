@@ -39,11 +39,13 @@ def build_datasets(cfg, default_args=None):
     for key in ['max_class_num']:
         if key in cfg:
             default_args[key] = cfg[key]
+    
     for data_type, root, trans_list, resized_size in zip(cfg.type, cfg.root, cfg.transforms, cfg.resized_size):
         trans_kwargs = {
             'RandomResizedCrop':{'size':resized_size},
             'Resize':{'size':resized_size},
-            'Normalize':{'mean':(0.4914, 0.4822, 0.4465), 'std':(0.247, 0.243, 0.261)}
+            'Normalize':{'mean':(0.4914, 0.4822, 0.4465), 'std':(0.247, 0.243, 0.261)},
+            'SimCLR':{'size':resized_size}
         }
         if data_type == 'cifar10':
              dataset = CIFAR10(
@@ -57,16 +59,6 @@ def build_datasets(cfg, default_args=None):
                 **default_args)
         elif data_type == 'imagenet':
              dataset = ImageNet(
-                root=root,
-                transforms=build_transforms(trans_list, trans_kwargs),
-                **default_args)
-        elif data_type == 'quickdraw':
-            dataset = QuickDraw(
-                root=root,
-                transforms=build_transforms(trans_list, trans_kwargs),
-                **default_args)
-        elif data_type == 'tuberlin':
-            dataset = TUBerlin(
                 root=root,
                 transforms=build_transforms(trans_list, trans_kwargs),
                 **default_args)

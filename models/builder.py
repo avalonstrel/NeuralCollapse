@@ -5,7 +5,7 @@ from models.backbones import ResnetBackbone
 from models.heads import ClsHead
 from models.classifiers import (VGGClassifier, ResNetClassifier, InceptionClassifier,
                                 SqueezeNetClassifier, DenseNetClassifier, SENetClassifier, SwinClassifier,
-                                ODEClassifier, ViTClassifier, HybridNetClassifier, HybridODEClassifier)
+                                ODEClassifier, ViTClassifier, HybridNetClassifier, HybridODEClassifier, ResNetSSLModel)
 
 
 
@@ -29,6 +29,12 @@ def build_models(cfg):
                                           model_type=model_type, 
                                           no_mean=no_mean,
                                           no_var=no_var,
+                                          pretrained=False)
+        elif 'ssl_resnet' in model_type:
+            models['ssl'] = ResNetSSLModel(cfg.out_dim, 
+                                          model_type=model_type, 
+                                          image_size=cfg.image_size,
+                                          norm_type=cfg.norm_type,
                                           pretrained=False)
         elif 'resnet' in model_type:
             models['cls'] = ResNetClassifier(cfg.num_classes, 
@@ -82,6 +88,7 @@ def build_models(cfg):
                                                 cfg.structures, 
                                                 image_size=cfg.image_size,
                                                 norm_type=cfg.norm_type)
+        
         else:
             raise ValueError(f'Unrecognized model type {model_type}')
 

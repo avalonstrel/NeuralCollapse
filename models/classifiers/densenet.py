@@ -116,7 +116,13 @@ class _DenseBlock(nn.ModuleDict):
             new_features = layer(features)
             features.append(new_features)
         return torch.cat(features, 1)
-
+    
+    def get_features(self, init_features: Tensor) -> Tensor:
+        features = [init_features]
+        for name, layer in self.items():
+            new_features = layer(features)
+            features.append(new_features)
+        return torch.cat(features, 1), features
 
 class _Transition(nn.Sequential):
     def __init__(self, num_input_features: int, num_output_features: int) -> None:
@@ -160,6 +166,7 @@ class DenseNetClassifier(nn.Module):
 
         super().__init__()
         growth_rate, block_config, num_init_features = _DENSENET_ARGS[model_type]
+        # (32, (6, 12, 24, 16), 64)
 
         # First convolution
         self.features = nn.Sequential(
@@ -212,24 +219,21 @@ class DenseNetClassifier(nn.Module):
         outputs = []
         # feats = self.features(x)
         for layer in self.features:
-            x = layer(x)
             # print(layer)
-            if isinstance(layer, nn.MaxPool2d) or isinstance(layer, _DenseBlock):
+            if isinstance(layer, _DenseBlock):
+                x, features = layer.get_features(x)
+                # outputs.extend([feat.detach().cpu() for feat in features])
                 outputs.append(x.detach().cpu())
+            elif isinstance(layer, nn.MaxPool2d):
+                x = layer(x)
+                outputs.append(x.detach().cpu())
+            else:
+                x = layer(x)
             
-        # for name, module in self.features.named_modules():
-        #     if name == '':
-        #         continue
-        #     print(name, module)
-        #     x = module(x)
-        #     if 'pool0' in name or 'denseblock' in name:
-        #         outputs.append(x.detach().cpu())
-        # features = self.features(x)
         out = F.relu(x, inplace=True)
         out = F.adaptive_avg_pool2d(out, (1, 1))
         out = torch.flatten(out, 1)
         out = self.classifier(out)
-        outputs.append(out.detach().cpu())
         return outputs
 
     def forward(self, x: Tensor) -> Tensor:

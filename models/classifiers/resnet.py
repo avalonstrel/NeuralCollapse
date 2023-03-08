@@ -184,6 +184,7 @@ class Bottleneck(nn.Module):
         return out, feats
 
 KWARGS_DICT = {
+    'resnet18':(BasicBlock, [2, 2, 2, 2]),
     'resnet34':(BasicBlock, [3, 4, 6, 3]),
     'resnet50':(Bottleneck, [3, 4, 6, 3]),
     'resnet101':(Bottleneck, [3, 4, 23, 3]),
@@ -388,6 +389,202 @@ class ResNetClassifier(nn.Module):
         for layer in self.layer4:
             if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
                 x, layer_feats = layer.get_features(x)
+                if 'layer' in feat_type:
+                    feats.extend(layer_feats) 
+                elif 'block' in feat_type:
+                    feats.append(layer_feats[-1]) 
+            else:
+                x = layer(x)
+    
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return feats
+        
+    def forward(self, x: Tensor) -> Tensor:
+        return self._forward_impl(x)
+
+class ResNetSSLModel(nn.Module):
+    def __init__(
+        self,
+        out_dim, model_type='resnet50', image_size=32,  norm_type='bn', pretrained=False,
+    ) -> None:
+        super().__init__()
+
+        tmp_inputs = torch.rand(2, 3, image_size, image_size)  # just for layer norm size
+        model_type = model_type.replace('ssl_', '')
+        block, layers = KWARGS_DICT[model_type]
+        # Some default parameters
+        zero_init_residual = False
+        groups = 1
+        width_per_group = 64
+        replace_stride_with_dilation = None
+
+        self.norm_type = norm_type
+
+        self.inplanes = 64
+        self.dilation = 1
+        if replace_stride_with_dilation is None:
+            # each element in the tuple indicates if we should replace
+            # the 2x2 stride with a dilated convolution instead
+            replace_stride_with_dilation = [False, False, False]
+        if len(replace_stride_with_dilation) != 3:
+            raise ValueError(
+                "replace_stride_with_dilation should be None "
+                f"or a 3-element tuple, got {replace_stride_with_dilation}"
+            )
+
+        self.groups = groups
+        self.base_width = width_per_group
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        tmp_inputs = self.conv1(tmp_inputs)
+        self.bn1 = NormLayer(tmp_inputs.size()[1:], self.norm_type)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        tmp_inputs = self.maxpool(tmp_inputs)
+        self.layer1, tmp_inputs = self._make_layer(block, 64, layers[0], tmp_inputs=tmp_inputs, norm_type=norm_type)
+        self.layer2, tmp_inputs = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], tmp_inputs=tmp_inputs, norm_type=norm_type)
+        self.layer3, tmp_inputs = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], tmp_inputs=tmp_inputs, norm_type=norm_type)
+        self.layer4, tmp_inputs = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], tmp_inputs=tmp_inputs, norm_type=norm_type)
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        dim_mlp = 512 * block.expansion
+        self.fc = nn.Sequential(
+            nn.Linear(dim_mlp, dim_mlp),
+            nn.ReLU(),
+            nn.Linear(dim_mlp, out_dim)
+        )
+        
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+        # Zero-initialize the last BN in each residual branch,
+        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
+        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
+        if zero_init_residual:
+            for m in self.modules():
+                if isinstance(m, Bottleneck) and m.bn3.weight is not None:
+                    nn.init.constant_(m.bn3.weight, 0)  # type: ignore[arg-type]
+                elif isinstance(m, BasicBlock) and m.bn2.weight is not None:
+                    nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
+
+    def _make_layer(
+        self,
+        block: Type[Union[BasicBlock, Bottleneck]],
+        planes: int,
+        blocks: int,
+        stride: int = 1,
+        dilate: bool = False,
+        tmp_inputs = None,
+        norm_type = 'bn',
+    ) -> nn.Sequential:
+        
+        downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            tmp_conv = conv1x1(self.inplanes, planes * block.expansion, stride)
+            tmp_tmp_inputs = tmp_conv(tmp_inputs)
+            downsample = nn.Sequential(
+                tmp_conv,
+                NormLayer(tmp_tmp_inputs.size()[1:], norm_type)
+                # norm_layer(planes * block.expansion),
+            )
+
+        layers = []
+        tmp_block = block(
+                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_type, tmp_inputs
+            )
+        tmp_inputs = tmp_block(tmp_inputs)
+        layers.append(
+            tmp_block
+        )
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            tmp_block = block(
+                    self.inplanes,
+                    planes,
+                    groups=self.groups,
+                    base_width=self.base_width,
+                    dilation=self.dilation,
+                    norm_type=norm_type,
+                    tmp_inputs=tmp_inputs
+                )
+            tmp_inputs = tmp_block(tmp_inputs)
+            layers.append(
+                tmp_block
+            )
+
+        return nn.Sequential(*layers), tmp_inputs
+
+    def _forward_impl(self, x: Tensor) -> Tensor:
+        # See note [TorchScript super()]
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x
+
+    def get_features(self, x, feat_type='relu'):
+        feats = []
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        feats.append(x.detach().cpu())
+        for layer in self.layer1:
+            if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
+                x, layer_feats = layer.get_features(x)
+                
+                if 'layer' in feat_type:
+                    feats.extend(layer_feats) 
+                elif 'block' in feat_type:
+                    feats.append(layer_feats[-1]) 
+            else:
+                x = layer(x)
+
+        for layer in self.layer2:
+            if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
+                x, layer_feats = layer.get_features(x)
+                
+                if 'layer' in feat_type:
+                    feats.extend(layer_feats) 
+                elif 'block' in feat_type:
+                    feats.append(layer_feats[-1]) 
+            else:
+                x = layer(x)
+
+        for layer in self.layer3:
+            if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
+                x, layer_feats = layer.get_features(x)
+                
+                if 'layer' in feat_type:
+                    feats.extend(layer_feats) 
+                elif 'block' in feat_type:
+                    feats.append(layer_feats[-1]) 
+            else:
+                x = layer(x)
+
+        for layer in self.layer4:
+            if isinstance(layer, Bottleneck) or isinstance(layer, BasicBlock):
+                x, layer_feats = layer.get_features(x)
                 
                 if 'layer' in feat_type:
                     feats.extend(layer_feats) 
@@ -404,83 +601,3 @@ class ResNetClassifier(nn.Module):
         
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
-
-
-# RESNET_DICT = {
-#     'resnet18':resnet18,
-#     'resnet34':resnet34,
-#     'resnet50':resnet50,
-#     'resnet101':resnet101,
-# }
-
-# BLOCK_DICT = {
-#     'resnet18':BasicBlock,
-#     'resnet34':BasicBlock,
-#     'resnet50':Bottleneck,
-#     'resnet101':Bottleneck,
-# }
-
-# class ResNetClassifier(nn.Module):
-#     """Just a warpper for modify forward process
-#     """
-#     def __init__(self, num_classes, model_type='resnet50', pretrained=False):
-#         super().__init__()
-#         assert model_type in RESNET_DICT, f'Unrecognized {model_type}'
-#         _resnet = RESNET_DICT[model_type](pretrained=pretrained)
-#         self.conv1 = _resnet.conv1
-#         self.bn1 = _resnet.bn1
-#         self.relu = _resnet.relu
-#         self.maxpool = _resnet.maxpool
-#         self.layer1 = _resnet.layer1
-#         self.layer2 = _resnet.layer2
-#         self.layer3 = _resnet.layer3
-#         self.layer4 = _resnet.layer4
-#         self.avgpool = _resnet.avgpool
-#         self.fc = nn.Linear(512 * BLOCK_DICT[model_type].expansion, num_classes)
-
-#     def init_weights(self):
-#         for m in self.modules():
-#             if isinstance(m, nn.Conv2d):
-#                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-#             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-#                 nn.init.constant_(m.weight, 1)
-#                 nn.init.constant_(m.bias, 0)
-    
-#     def get_features(self, x, feat_type='relu'):
-#         feats = []
-#         x = self.conv1(x)
-#         x = self.bn1(x)
-#         x = self.relu(x)
-#         x = self.maxpool(x)
-#         feats.append(x.detach().cpu())
-#         x = self.layer1(x)
-#         feats.append(x.detach().cpu())
-#         x = self.layer2(x)
-#         feats.append(x.detach().cpu())
-#         x = self.layer3(x)
-#         feats.append(x.detach().cpu())
-#         x = self.layer4(x)
-#         feats.append(x.detach().cpu())
-#         x = self.avgpool(x)
-#         x = torch.flatten(x, 1)
-#         x = self.fc(x)
-#         feats.append(x.detach().cpu())
-#         return feats
-
-#     def forward(self, x):
-        
-#         x = self.conv1(x)
-#         x = self.bn1(x)
-#         x = self.relu(x)
-#         x = self.maxpool(x)
-
-#         x = self.layer1(x)
-#         x = self.layer2(x)
-#         x = self.layer3(x)
-#         x = self.layer4(x)
-
-#         x = self.avgpool(x)
-#         x = torch.flatten(x, 1)
-#         x = self.fc(x)
-
-#         return x

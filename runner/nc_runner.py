@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import os
+import glob
 # from .runner import Runner
 import torch.distributed as dist 
 from utils.parallel import get_dist_info
@@ -25,6 +26,7 @@ class NCRunner:
                  print_every=100,
                  val_every=20000,
                  save_every=20000,
+                 resume_latest=True,
                  meta=None):
         self.models = models
         self.optims = optims
@@ -43,6 +45,16 @@ class NCRunner:
         self._val_every = val_every
         self._save_every = save_every
         self.meta = meta if meta is not None else {}
+        if resume_latest:
+            ckpt_dir = os.path.join(self.work_dir, 'chckpoints')
+            ckpt_paths = glob.glob(f'{ckpt_dir}/iter_*.pth')
+            if len(ckpt_paths) > 0:
+                max_length = max([len(ckpt) for ckpt in ckpt_paths])
+                ckpt_paths = [ckpt for ckpt in ckpt_paths if len(ckpt) == max_length]
+                latest_ckpt_path = max(ckpt_paths)
+                print(f'resume from {latest_ckpt_path}')
+                map_location = next(self.models['cls'].parameters()).device
+                self.resume(latest_ckpt_path, map_location=map_location)
 
     @property
     def model_name(self) -> str:
@@ -90,8 +102,7 @@ class NCRunner:
         if hasattr(self.models['cls'], 'nfe'):
             metrics_names.extend(['f_nfe', 'b_nfe'])
         metrics_dict = {metric:AverageMeter() for metric in metrics_names}
-        records = {'conv':[], 'bn':[], 'relu':[]}
-        return metrics_names, metrics_dict, records
+        return metrics_names, metrics_dict
 
     def display_info(self, tag, epoch_i, iter_i, metrics_names, metrics_dict):
         metrics_message = display_metrics_dict(metrics_names, metrics_dict)
@@ -134,9 +145,7 @@ class NCRunner:
 
     def train(self, data_names, train_data_loaders, val_data_loaders):
         # Update the max_iters
-        
         train_data_loader = train_data_loaders[data_names[0]]
-        val_data_loader = val_data_loaders[data_names[0]]
         self._each_iters = len(train_data_loader)
         self._max_iters = self._max_epochs * self._each_iters
 
@@ -149,7 +158,7 @@ class NCRunner:
             sampled_data.append(data_batch_)
         
         # Info 
-        metrics_names, metrics_dict, records = self.initialize_metrics_dict()
+        metrics_names, metrics_dict = self.initialize_metrics_dict()
         whole_iter_i = 1
         is_odenet = hasattr(self.models['cls'], 'nfe')
         for epoch_i in range(self._max_epochs):
@@ -190,22 +199,19 @@ class NCRunner:
                         self.val(data_names, val_data_loaders, epoch_i, iter_i)
                         
                     if whole_iter_i % self._save_every == 0:
-                        # save records
-                        # record_dir = os.path.join(self.work_dir, 'records')
-                        # os.makedirs(record_dir, exist_ok=True)
-                        # torch.save(records, os.path.join(record_dir, f'iter_{whole_iter_i}.pth'))
                         # save checkpoints
                         self.save_checkpoint(self.work_dir, f'iter_{whole_iter_i}.pth') 
                         
                 whole_iter_i += 1
                 self._iter = whole_iter_i
             self._epoch = epoch_i
+        self.save_checkpoint(self.work_dir, f'final.pth')
 
     def val(self, data_names, val_data_loaders, epoch_i=-1, iter_i=-1):
         val_data_loader = val_data_loaders[data_names[0]]
         self.models['cls'].eval()
         
-        metrics_names, metrics_dict, records = self.initialize_metrics_dict()
+        metrics_names, metrics_dict = self.initialize_metrics_dict()
 
         with torch.no_grad():
             for iter_i, data_batch in enumerate(val_data_loader):
@@ -229,7 +235,7 @@ class NCRunner:
         """
         self.train(data_names, train_data_loaders, val_data_loaders)
 
-        self.val(data_names, val_data_loaders, self._max_epochs, 0)
+        # self.val(data_names, val_data_loaders, self._max_epochs, 0)
 
     def current_lr(self):
         """Get current learning rates.

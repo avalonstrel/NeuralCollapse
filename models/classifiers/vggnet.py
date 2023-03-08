@@ -66,21 +66,21 @@ def make_layers(cfg: List[Union[str, int]], input_size: List[int], norm_type: st
             v = cast(int, v)
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             tmp_inputs = conv2d(tmp_inputs)
-            if norm_type in ['bn', 'ln', 'in']:
-                layers += [conv2d, NormLayer(tmp_inputs.size()[1:], norm_type=norm_type, no_mean=no_mean, no_var=no_var), nn.ReLU(inplace=True)]
-                tmp_inputs = layers[-2](tmp_inputs)
-            else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            # if norm_type == 'bn':
-            #     layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            # elif norm_type == 'ln':
-            #     layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:]), nn.ReLU(inplace=True)]
-            # elif norm_type == 'in':
-            #     layers += [conv2d, nn.InstanceNorm2d(v), nn.ReLU(inplace=True)]
+            # if norm_type in ['bn', 'ln', 'in']:
+            #     layers += [conv2d, NormLayer(tmp_inputs.size()[1:], norm_type=norm_type, no_mean=no_mean, no_var=no_var), nn.ReLU(inplace=True)]
+            #     tmp_inputs = layers[-2](tmp_inputs)
             # else:
             #     layers += [conv2d, nn.ReLU(inplace=True)]
-            # if norm_type in ['bn', 'ln', 'in']:
-            #     tmp_inputs = layers[-2](tmp_inputs)
+            if norm_type == 'bn':
+                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
+            elif norm_type == 'ln':
+                layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:]), nn.ReLU(inplace=True)]
+            elif norm_type == 'in':
+                layers += [conv2d, nn.InstanceNorm2d(v), nn.ReLU(inplace=True)]
+            else:
+                layers += [conv2d, nn.ReLU(inplace=True)]
+            if norm_type in ['bn', 'ln', 'in']:
+                tmp_inputs = layers[-2](tmp_inputs)
 
             in_channels = v
     return tmp_inputs, nn.Sequential(*layers)
@@ -94,7 +94,7 @@ class VGGClassifier(nn.Module):
         tmp_inputs, features = make_layers(CFGS[model_type], (image_size, image_size), norm_type=norm_type, no_mean=no_mean, no_var=no_var)
         self.features = features
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
-        tmp_inputs = self.avgpool(tmp_inputs)
+        # tmp_inputs = self.avgpool(tmp_inputs)
         tmp_inputs = torch.flatten(tmp_inputs, 1)
         self.classifier = nn.Sequential(
             nn.Linear(tmp_inputs.size(1), 4096),
@@ -140,6 +140,7 @@ class VGGClassifier(nn.Module):
         layer_idx = 0
         for channel in cfg:
             if channel == 'M':
+                layer_idxs.append(layer_idx)
                 layer_idx += 1
             else:
                 layer_idxs.append(layer_idx + layer_offset[layer_type])
@@ -153,22 +154,24 @@ class VGGClassifier(nn.Module):
         for i, layer in enumerate(self.features):
             x = layer(x)
             
-            if i in check_layer_idxs:
+            # if i in check_layer_idxs:
+            #     outputs.append(x.detach().cpu())
+            if isinstance(layer, (nn.Conv2d, nn.MaxPool2d)):
                 # print(layer)
                 # outputs[lt].append(x.reshape(x.size(0),-1)[:,:256].detach().cpu())
                 outputs.append(x.detach().cpu())
-        x = self.avgpool(x)
+        # x = self.avgpool(x)
         x = torch.flatten(x, 1)
         for i, layer in enumerate(self.classifier):
             x = layer(x)
-            if i in [1,3]:
-                outputs.append(x.detach().cpu())
-        outputs.append(x.detach().cpu())
+            # if i in [1,3]:
+            #     outputs.append(x.detach().cpu())
+        
         return outputs
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.features(x)
-        x = self.avgpool(x)
+        # x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x

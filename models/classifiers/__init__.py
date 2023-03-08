@@ -1,5 +1,5 @@
 from .vggnet import VGGClassifier
-from .resnet import ResNetClassifier
+from .resnet import ResNetClassifier, ResNetSSLModel
 from .inception import InceptionClassifier
 from .squeezenet import SqueezeNetClassifier
 from .densenet import DenseNetClassifier
@@ -11,10 +11,11 @@ from .vit import ViTClassifier
 from .hybridnet import HybridNetClassifier, HybridODEClassifier
 
 __all__ = [
-    'VGGClassifier', 'ResNetClassifier', 'InceptionClassifier',
+    'VGGClassifier', 'ResNetClassifier', 'InceptionClassifier', 'DenseNetClassifier',
     'SqueezeNetClassifier', 'DenseNetClasssifier', 'SENetClassifier',
     'SwinClassifier', 'MobileNetClassifier', 'ODEClassifier', 'ViTClassifier',
-    'HybridNetClassifier', 'HybridODEClassifier'
+    'HybridNetClassifier', 'HybridODEClassifier',
+    'ResNetSSLModel'
 ]
 
 

@@ -1,9 +1,10 @@
 import os
-path = './exprs'
+path = './exprs/backup'
 
 for expr_name in os.listdir(path):
-    if expr_name.startswith('.'):
+    if expr_name.startswith('.') or not ('cifar10_' in expr_name and 'resnet' in expr_name):
         continue
+    
     expr_dir = os.path.join(path, expr_name)
     for ckpt_name in os.listdir(expr_dir):
         if ckpt_name.startswith('.'):

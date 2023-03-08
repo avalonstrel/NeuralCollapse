@@ -162,7 +162,9 @@ def train_model(cfg,
             'config is now expected to have a `runner` section, '
             'please set `runner` in your config.', UserWarning)
     runner_args = {key:cfg.runner[key] for key in cfg.runner}
-
+    resume_latest = True
+    if 'resume_latest' in runner_args:
+        resume_latest = runner_args['resume_latest']
     runner_args.update({
             'models':models,
             'losses':losses,
@@ -170,7 +172,8 @@ def train_model(cfg,
             'logger':logger,
             'work_dir':cfg.work_dir,
             'max_epochs':cfg.max_epochs,
-            'meta':meta
+            'meta':meta,
+            'resume_latest':resume_latest,
         })
     
     runner = build_runner(runner_args)
@@ -188,7 +191,7 @@ def train_model(cfg,
             'drop_last': False,  # Not drop last by default
             **cfg.data.get('val_dataloader', {}),
         }
-        val_data_loaders = {ds:build_dataloader(datasets[ds], **val_loader_cfg) for ds in datasets}
+        val_data_loaders = {ds:build_dataloader(val_datasets[ds], **val_loader_cfg) for ds in datasets}
         
     if cfg.resume_from:
         runner.resume(cfg.resume_from)

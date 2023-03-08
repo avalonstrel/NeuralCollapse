@@ -14,6 +14,8 @@ from torchvision.ops.stochastic_depth import StochasticDepth
 
 from .resnet import BasicBlock, Bottleneck
 
+from .densenet import _DenseBlock, _Transition
+
 from .inception import InceptionA, InceptionB, InceptionC, InceptionD
 
 from .vit import EncoderBlock
@@ -72,7 +74,6 @@ class PostViTTrans(nn.Module):
         # (n, c, h, w) -> (n, c, h, w)
         return x
 
-
 class PreSwinTrans(nn.Module):
     def __init__(self):
         super().__init__()
@@ -86,6 +87,42 @@ class PostSwinTrans(nn.Module):
         
     def forward(self, x):
         return x.permute(0, 3, 1, 2)
+
+
+class PostFCTrans(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.channels = channels
+
+    def forward(self, x):
+
+        b, whole_channels = x.size()
+        hw = whole_channels // self.channels
+        h = w = int(hw**(0.5))
+        return x.reshape(b, self.channels, h, w)
+
+class FCLayer(nn.Module):
+    def __init__(self, cfg):
+
+        super().__init__()
+        norm = None
+        if len(cfg) == 2:
+            in_channels, out_channels = cfg
+        elif len(cfg) == 3:
+            in_channels, out_channels, norm = cfg
+
+        self.fc = nn.Linear(in_channels, out_channels)
+        if norm is not None and norm == 'bn':
+            self.norm = nn.BatchNorm1d(out_channels)
+        self.act = nn.ReLU(True)
+
+    def forward(self, x):
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        if hasattr(self, 'norm'):
+            x = self.norm(x)
+        x = self.act(x)
+        return x
 
 class NormLayer(nn.Module):
     def __init__(self, input_size, norm_type='bn'):
@@ -112,9 +149,17 @@ def vgg_layers(cfg, norm_type='bn', tmp_inputs=None):
         if v == "M":
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
             tmp_inputs = layers[-1](tmp_inputs)
+        elif v == "A":
+            layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
+            tmp_inputs = layers[-1](tmp_inputs)
         else:
-            v = cast(int, v)
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
+            kernel_size = 3
+            padding = 1
+            if isinstance(v, list):
+                v, kernel_size, padding = [cast(int, v_) for v_ in v]
+            else: 
+                v = cast(int, v)
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=kernel_size, padding=padding)
             tmp_inputs = conv2d(tmp_inputs)
             if norm_type == 'bn':
                 layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
@@ -145,23 +190,26 @@ BLOCKS = {
     'PostViTTrans':PostViTTrans,
     'PreSwinTrans':PreSwinTrans,
     'PostSwinTrans':PostSwinTrans,
+    'FC':FCLayer,
+    'PostFCTrans':PostFCTrans,
+    'DenseBlock':_DenseBlock,
+    'Transition':_Transition,
 }
 
 # TEMPLATE_BLOCKS = [
-#     'vgg_layers':(cfg: [64,'M'],  norm_type: 'bn', tmp_inputs),  # Simple CNN Layers
-#     'BasicBlock':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
-#     'Bottleneck':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
-#     'InceptionA':(in_channels: int, pool_features: int),
-#     'InceptionB':(in_channels),
-#     'InceptionC':(in_channels: int, channels_7x7: int),
-#     'InceptionD':(in_channels),
-#     'ViTBlock':(num_heads: int, hidden_dim: int, mlp_dim: int,),
-#     'SwinBlock':(dim: int, num_heads: int, window_size: List[int], shift_size: List[int],),
-#     'PatchMerging':(dim:input C)
+#     'vgg_layers': (cfg: [64,'M'],  norm_type: 'bn', tmp_inputs),  # Simple CNN Layers
+#     'BasicBlock': (inplanes, planes, stride = 1, norm_type = 'bn', tmp_inputs = None),
+#     'Bottleneck': (inplanes, planes, stride = 1, norm_type = 'bn', tmp_inputs = None),
+#     'InceptionA': (in_channels, pool_features),
+#     'InceptionB': (in_channels),
+#     'InceptionC': (in_channels, channels_7x7),
+#     'InceptionD': (in_channels),
+#     'ViTBlock': (num_heads, hidden_dim, mlp_dim,),
+#     'SwinBlock': (dim, num_heads, window_size: List[int], shift_size: List[int],),
+#     'PatchMerging': (dim:input C),
+#     '_DenseBlock': (num_layers, num_input_features, bn_size, growth_rate, drop_rate,)
+#     '_Transition': (num_input_features, num_output_features)
 # ]
-# 
-# 
-
 
 class HybridNetClassifier(nn.Module):
     '''
@@ -198,7 +246,6 @@ class HybridNetClassifier(nn.Module):
             ])
         # N 64 H W
         blocks = []
-        pre_transformer = False  # whether the previous block is transformer based block
         for (block, block_args) in structures:
             kwargs = {}
             if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
@@ -234,13 +281,13 @@ class HybridNetClassifier(nn.Module):
                 h = w = int(hw**(0.5))
                 outputs.append(x.reshape(n, h, w, c).permute(0,3,1,2).detach().cpu())    
             elif isinstance(block, (PreSwinTrans, SwinTransformerBlock)):
-                outputs.append(x.permute(0,3,1,2).detach().cpu())    
+                outputs.append(x.permute(0,3,1,2).detach().cpu())
+               
             else:
                 outputs.append(x.detach().cpu())
 
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        outputs.append(x.detach().cpu())
         return outputs
 
     def forward(self, x, onnx=False):

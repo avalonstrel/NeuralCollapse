@@ -168,3 +168,13 @@ class CIFAR100(CIFAR10):
         'train', 'trout', 'tulip', 'turtle', 'wardrobe', 'whale',
         'willow_tree', 'wolf', 'woman', 'worm'
     ]
+
+class CIFAR10SimCLR(CIFAR10):
+    def __getitem__(self, idx):
+        img, label = self.data_infos[idx]['img'], self.data_infos[idx]['gt_label']
+        if self.transforms is not None:
+
+            img = self.transforms(Image.fromarray(img.astype(np.uint8)))
+        if self.target_transforms is not None:
+            label = self.target_transforms(label)
+        return img, label

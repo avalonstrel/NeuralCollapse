@@ -1,11 +1,13 @@
 import numpy as np
 import torch
 import os
-# from .runner import Runner
+import torch.nn.functional as F
+
 import torch.distributed as dist 
 from utils.parallel import get_dist_info
 from utils.display import display_metrics_dict
 from utils.evaluation import AverageMeter, accuracy, fuzziness
+
 
 class NCSSLRunner:
     """The runner for Checking Neural Collapse for each layer of neural network.
@@ -20,18 +22,21 @@ class NCSSLRunner:
                  losses,
                  logger,
                  work_dir,
-                 sample_size=500,
+                 n_views=2,
+                 temperature=0.07,
                  max_epochs=200,
                  print_every=100,
                  val_every=20000,
                  save_every=20000,
+                 resume_latest=True,
                  meta=None):
         self.models = models
         self.optims = optims
         self.losses = losses
         self.logger = logger
         self.work_dir = work_dir
-        self.sample_size = sample_size
+        self.n_views = n_views
+        self.temperature = temperature
         self._model_name = 'NCRunner'
         self._rank, self._world_size = get_dist_info()
         self._epoch = 1
@@ -87,11 +92,9 @@ class NCSSLRunner:
 
     def initialize_metrics_dict(self):
         metrics_names = ['loss', 'acc1', 'acc5']
-        if hasattr(self.models['cls'], 'nfe'):
-            metrics_names.extend(['f_nfe', 'b_nfe'])
         metrics_dict = {metric:AverageMeter() for metric in metrics_names}
-        records = {'conv':[], 'bn':[], 'relu':[]}
-        return metrics_names, metrics_dict, records
+
+        return metrics_names, metrics_dict
 
     def display_info(self, tag, epoch_i, iter_i, metrics_names, metrics_dict):
         metrics_message = display_metrics_dict(metrics_names, metrics_dict)
@@ -102,87 +105,88 @@ class NCSSLRunner:
         whole_message = tag + ' ' + epoch_message + ' (' + optim_message + ') :' + metrics_message
         self.logger.info(whole_message)
 
+    def info_nce_loss(self, features):
+        # create labels accroding to the batch_size
+        batch_size = features.size(0) // 2
+        device = features.device
+        labels = torch.cat([torch.arange(batch_size) for i in range(self.n_views)], dim=0)
+        labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float().to(device)
+        
+        features = F.normalize(features, dim=1)
+        similarity_matrix = torch.matmul(features, features.T)
+        
+        # eliminate the one-one pairs
+        mask = torch.eye(labels.size(0), dtype=torch.bool).to(device)
+        labels = labels[~mask].view(labels.size(0), -1)
+        similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.size(0), -1)
+
+        # select the positives 
+        positives = similarity_matrix[labels.bool()].view(labels.size(0), -1)
+        # select the negatives
+        negatives = similarity_matrix[~labels.bool()].view(labels.size(0), -1)
+
+        logits = torch.cat([positives, negatives], dim=1)
+        labels = torch.zeros(logits.size(0), dtype=torch.long).to(device)
+
+        logits = logits / self.temperature
+        return logits, labels
+
     def forward_loss(self, data_batch, return_input=False):
         # get task i model
-        classifier = self.models['cls']
-        device = next(classifier.parameters()).device
+        ssl_model = self.models['ssl']
+        device = next(ssl_model.parameters()).device
         # get data    
-        in_data, label = [dterm.to(device) for dterm in data_batch]
-        # pred, aux_outs = classifier(in_data, None)
-        pred = classifier(in_data)
+        in_data, labels = data_batch # [dterm.to(device) for dterm in data_batch]
+        in_data = [dterm.to(device) for dterm in in_data]
+        in_data = torch.cat(in_data, dim=0)
+        labels = labels.to(device)
 
-        loss_val = self.losses['cls'](pred, label)
+        # 2 * batch_size
+        features = ssl_model(in_data)
+
+        ssl_logits, ssl_labels = self.info_nce_loss(features)
+        loss_val = self.losses['cls'](ssl_logits, ssl_labels)
+
         if return_input:
-            return in_data, label, pred, loss_val
-        return pred, loss_val
-
-    def compute_fuzziness(self, sampled_outs, sampled_labels):
-        combined_labels = torch.cat(sampled_labels)
-        combined_outs = {}
-        fuzzs = {}
-        # sampled_outs: ['conv':[batch1[layer1, layer2,...], batch2[layer1, layer2,... ]], 'bn':..., 'relu':...]
-        # combined_outs: ['conv':[layer1, layer2, ...], 'bn':..., 'relu':...]
-        for sn in sampled_outs:
-            batch_num = len(sampled_outs[sn])
-            layer_num = len(sampled_outs[sn][0])
-            combined_outs[sn] = [torch.cat([sampled_outs[sn][b_i][l_i] for b_i in range(batch_num)], dim=0) for l_i in range(layer_num)]
-
-            fuzzs[sn] = []
-            for l_i in range(layer_num):
-                fuzzs[sn].append(fuzziness(combined_outs[sn][l_i], combined_labels))
-        return fuzzs
+            return in_data, labels, ssl_logits, ssl_labels, loss_val
+        return ssl_logits, ssl_labels, loss_val
 
     def train(self, data_names, train_data_loaders, val_data_loaders):
         # Update the max_iters
         
         train_data_loader = train_data_loaders[data_names[0]]
-        val_data_loader = val_data_loaders[data_names[0]]
         self._each_iters = len(train_data_loader)
         self._max_iters = self._max_epochs * self._each_iters
 
         # get the sampled data
-        batch_num = self.sample_size // train_data_loader.batch_size + 1
-        sampled_data = []
-        for i, data_batch_ in enumerate(train_data_loader):
-            if i >= batch_num:
-                break
-            sampled_data.append(data_batch_)
         
         # Info 
-        metrics_names, metrics_dict, records = self.initialize_metrics_dict()
+        metrics_names, metrics_dict= self.initialize_metrics_dict()
         whole_iter_i = 1
-        is_odenet = hasattr(self.models['cls'], 'nfe')
         for epoch_i in range(self._max_epochs):
             for iter_i, data_batch in enumerate(train_data_loader):
                 # zero cls optimizer grad
-                self.optims['cls'].zero_grad()
+                self.optims['ssl'].zero_grad()
 
                 # forward loss
-                in_data, label, pred, loss_val = self.forward_loss(data_batch, return_input=True)
-                if is_odenet:
-                    nfe_forward = self.models['cls'].nfe
-                    self.models['cls'].nfe = 0
+                ssl_logits, ssl_labels, loss_val = self.forward_loss(data_batch, return_input=False)
+                
                 loss_val.backward()
 
-                self.optims['cls'].step()
-                if is_odenet:
-                    nfe_backward = self.models['cls'].nfe
-                    self.models['cls'].nfe = 0
-
+                self.optims['ssl'].step()
+                
                 # Display and Save
                 if self._rank == 0:
                     if whole_iter_i % self._print_every == 0:
                         with torch.no_grad():
 
                             # update metrics
-                            accs = accuracy(pred, label, topk=(1,5))
-                            metrics_dict['loss'].update(loss_val.detach().cpu().item(), pred.size(0))
-                            metrics_dict['acc1'].update(accs[1], pred.size(0))
-                            metrics_dict['acc5'].update(accs[5], pred.size(0))
+                            batch_size = ssl_logits.size(0)
+                            accs = accuracy(ssl_logits, ssl_labels, topk=(1,5))
+                            metrics_dict['loss'].update(loss_val.detach().cpu().item(), batch_size)
+                            metrics_dict['acc1'].update(accs[1], batch_size)
+                            metrics_dict['acc5'].update(accs[5], batch_size)
                             metrics_dict_val = {mn:metrics_dict[mn].val for mn in metrics_names}
-                            if is_odenet:
-                                metrics_dict['f_nfe'].update(nfe_forward)
-                                metrics_dict['b_nfe'].update(nfe_backward)
 
                             self.display_info('Train', epoch_i, iter_i, metrics_names, metrics_dict_val)
                         
@@ -190,10 +194,6 @@ class NCSSLRunner:
                         self.val(data_names, val_data_loaders, epoch_i, iter_i)
                         
                     if whole_iter_i % self._save_every == 0:
-                        # save records
-                        # record_dir = os.path.join(self.work_dir, 'records')
-                        # os.makedirs(record_dir, exist_ok=True)
-                        # torch.save(records, os.path.join(record_dir, f'iter_{whole_iter_i}.pth'))
                         # save checkpoints
                         self.save_checkpoint(self.work_dir, f'iter_{whole_iter_i}.pth') 
                         
@@ -203,23 +203,24 @@ class NCSSLRunner:
 
     def val(self, data_names, val_data_loaders, epoch_i=-1, iter_i=-1):
         val_data_loader = val_data_loaders[data_names[0]]
-        self.models['cls'].eval()
+        self.models['ssl'].eval()
         
-        metrics_names, metrics_dict, records = self.initialize_metrics_dict()
+        metrics_names, metrics_dict = self.initialize_metrics_dict()
 
         with torch.no_grad():
             for iter_i, data_batch in enumerate(val_data_loader):
                 # forward loss
-                in_data, label, pred, loss_val = self.forward_loss(data_batch, return_input=True)
-                accs = accuracy(pred, label, topk=(1,5))
-                metrics_dict['loss'].update(loss_val.detach().cpu().item(), pred.size(0))
-                metrics_dict['acc1'].update(accs[1], pred.size(0))
-                metrics_dict['acc5'].update(accs[5], pred.size(0))
+                ssl_logits, ssl_labels, loss_val = self.forward_loss(data_batch, return_input=False)
+                accs = accuracy(ssl_logits, ssl_labels, topk=(1,5))
+                batch_size = ssl_logits.size(0)
+                metrics_dict['loss'].update(loss_val.detach().cpu().item(), batch_size)
+                metrics_dict['acc1'].update(accs[1], batch_size)
+                metrics_dict['acc5'].update(accs[5], batch_size)
                     
             metrics_dict_avg = {m:metrics_dict[m].avg for m in metrics_dict}
             
             self.display_info('Val', epoch_i, iter_i, metrics_names, metrics_dict_avg)
-        self.models['cls'].train()
+        self.models['ssl'].train()
 
     def run(self, data_names, 
             train_data_loaders, val_data_loaders,
@@ -239,7 +240,7 @@ class NCSSLRunner:
             param groups. If the runner has a dict of optimizers, this method
             will return a dict.
         """
-        lr: Union[List[float], Dict[str, List[float]]]
+        
         if isinstance(self.optims, torch.optim.Optimizer):
             lr = [group['lr'] for group in self.optimizer.param_groups]
         elif isinstance(self.optims, dict):
