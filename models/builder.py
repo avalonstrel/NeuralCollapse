@@ -5,7 +5,7 @@ from models.backbones import ResnetBackbone
 from models.heads import ClsHead
 from models.classifiers import (VGGClassifier, ResNetClassifier, InceptionClassifier,
                                 SqueezeNetClassifier, DenseNetClassifier, SENetClassifier, SwinClassifier,
-                                ODEClassifier, ViTClassifier, HybridNetClassifier, HybridODEClassifier, ResNetSSLModel)
+                                ODEClassifier, ViTClassifier, HybridNetClassifier, PureHybridNetClassifier, HybridODEClassifier, ResNetSSLModel)
 
 
 
@@ -83,6 +83,11 @@ def build_models(cfg):
                                                 norm_type=cfg.norm_type,
                                                 atol=cfg.atol,
                                                 rtol=cfg.rtol,)
+        elif 'purehybrid' in model_type:
+            models['cls'] = PureHybridNetClassifier(cfg.num_classes, 
+                                                cfg.structures, 
+                                                image_size=cfg.image_size,
+                                                norm_type=cfg.norm_type)
         elif 'hybrid' in model_type:
             models['cls'] = HybridNetClassifier(cfg.num_classes, 
                                                 cfg.structures, 

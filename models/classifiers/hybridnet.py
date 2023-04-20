@@ -1,5 +1,6 @@
 import math
 from functools import partial
+from collections import Iterator, Iterable
 from typing import Any, cast, Callable, List, Optional
 
 import torch
@@ -106,22 +107,28 @@ class FCLayer(nn.Module):
 
         super().__init__()
         norm = None
+        act = True
         if len(cfg) == 2:
             in_channels, out_channels = cfg
         elif len(cfg) == 3:
             in_channels, out_channels, norm = cfg
-
+        elif len(cfg) == 4:
+            in_channels, out_channels, norm, act = cfg
+            if isinstance(act, str):
+                act = eval(act)
         self.fc = nn.Linear(in_channels, out_channels)
         if norm is not None and norm == 'bn':
             self.norm = nn.BatchNorm1d(out_channels)
-        self.act = nn.ReLU(True)
+        if act:
+            self.act = nn.ReLU(True)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         if hasattr(self, 'norm'):
             x = self.norm(x)
-        x = self.act(x)
+        if hasattr(self, 'act'):
+            x = self.act(x)
         return x
 
 class NormLayer(nn.Module):
@@ -141,36 +148,69 @@ class NormLayer(nn.Module):
             x = self.norm(x)
         return x
 
+class Flatten(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, x):
+        return torch.flatten(x, 1)
+        
 def vgg_layers(cfg, norm_type='bn', tmp_inputs=None):
     layers: List[nn.Module] = []
     input_size = tmp_inputs.size()[1:]
     in_channels = input_size[0]
     for v in cfg:
-        if v == "M":
+        if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
             tmp_inputs = layers[-1](tmp_inputs)
-        elif v == "A":
+        elif v == 'A':
             layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
+            tmp_inputs = layers[-1](tmp_inputs)
+        elif v == 'DNC':  # Down Conv
+            layers += [nn.Conv2d(in_channels, in_channels, kernel_size=2, stride=2, padding=0)]
+            tmp_inputs = layers[-1](tmp_inputs)
+        elif v == 'UPC':  # Up Conv
+            layers += [nn.ConvTranspose2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1)]
+            tmp_inputs = layers[-1](tmp_inputs)
+        elif v == 'UPI':  # Up Interpolation
+            layers += [nn.Upsample(scale_factor=2)]
             tmp_inputs = layers[-1](tmp_inputs)
         else:
             kernel_size = 3
+            stride = 1
             padding = 1
-            if isinstance(v, list):
-                v, kernel_size, padding = [cast(int, v_) for v_ in v]
+            activation = True
+            
+            if isinstance(v, Iterable):
+                if len(v) == 3:
+                    v, kernel_size, padding = [cast(int, v_) for v_ in v]
+                elif len(v) == 4:
+                    activation = eval(v[3])
+                    v, kernel_size, padding = [cast(int, v_) for v_ in v[:3]]
+                elif len(v) == 5:
+                    activation = eval(v[4])
+                    v, kernel_size, stride, padding = [cast(int, v_) for v_ in v[:4]]
             else: 
                 v = cast(int, v)
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=kernel_size, padding=padding)
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=kernel_size, stride=stride, padding=padding)
             tmp_inputs = conv2d(tmp_inputs)
             if norm_type == 'bn':
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
+                layers += [conv2d, nn.BatchNorm2d(v)]
             elif norm_type == 'ln':
-                layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:]), nn.ReLU(inplace=True)]
+                layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:])]
             elif norm_type == 'in':
-                layers += [conv2d, nn.InstanceNorm2d(v), nn.ReLU(inplace=True)]
+                layers += [conv2d, nn.InstanceNorm2d(v)]
             else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            if norm_type in ['bn', 'ln', 'in']:
-                tmp_inputs = layers[-2](tmp_inputs)
+                layers += [conv2d]
+
+            if activation:
+                layers += [nn.ReLU(inplace=True)]
+
+            # if norm_type in ['bn', 'ln', 'in']:
+            #     if activation:
+            #         tmp_inputs = layers[-2](tmp_inputs)
+            #     else:
+            #         tmp_inputs = layers[-1](tmp_inputs)
 
             in_channels = v
     return nn.Sequential(*layers)
@@ -194,6 +234,7 @@ BLOCKS = {
     'PostFCTrans':PostFCTrans,
     'DenseBlock':_DenseBlock,
     'Transition':_Transition,
+    'Flatten':Flatten,
 }
 
 # TEMPLATE_BLOCKS = [
@@ -253,6 +294,7 @@ class HybridNetClassifier(nn.Module):
             if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
                 kwargs['norm_type'] = self.norm_type
             tmp_block = BLOCKS[block](*block_args, **kwargs)
+            
             blocks.append(tmp_block)
             x = tmp_block(x)
 
@@ -274,18 +316,26 @@ class HybridNetClassifier(nn.Module):
         x = self.in_conv(x)
         outputs.append(x.detach().cpu())
         for block in self.blocks:
-            x = block(x)
+            
 
             if isinstance(block, (PreViTTrans, EncoderBlock)):
+                x = block(x)
                 n, hw, c = x.size()
                 h = w = int(hw**(0.5))
                 outputs.append(x.reshape(n, h, w, c).permute(0,3,1,2).detach().cpu())    
             elif isinstance(block, (PreSwinTrans, SwinTransformerBlock)):
+                x = block(x)
                 outputs.append(x.permute(0,3,1,2).detach().cpu())
-               
             else:
+                # # For BatchNorm Now
+                # if isinstance(block, nn.Sequential):
+                #     for layer in block:
+                #         x = layer(x)
+                #         if isinstance(layer, nn.ReLU):
+                #             outputs.append(x.detach().cpu())
+                # else:
+                x = block(x)
                 outputs.append(x.detach().cpu())
-
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return outputs
@@ -299,6 +349,83 @@ class HybridNetClassifier(nn.Module):
                 x = block(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
+        return x
+
+class PureHybridNetClassifier(nn.Module):
+    '''
+    Construct Classifier with different kinds of blocks. 
+    Args:
+        num_classes[int]: the number of classes
+        structures[list]: e.g., [(block_type, args:(a,b,c)), ]
+    '''
+    def __init__(self,
+        num_classes,
+        structures, 
+        image_size=128,
+        norm_type='bn',
+        ):
+        super().__init__()
+        self.image_size = image_size
+        self.num_classes = num_classes
+        self.norm_type = norm_type
+        
+        self.build_models(structures)
+
+        self.init_weights()
+
+    def build_models(self, structures):
+        # input conv
+        x = torch.rand(2, 3, self.image_size, self.image_size)
+        # N 64 H W
+        blocks = []
+        for (block, block_args) in structures:
+            kwargs = {}
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['tmp_inputs'] = x
+            if block in ['VGGBlock', 'ResBlock', 'ResBottleneck']:
+                kwargs['norm_type'] = self.norm_type
+            tmp_block = BLOCKS[block](*block_args, **kwargs)
+            blocks.append(tmp_block)
+            # print(tmp_block, x.size())
+            x = tmp_block(x)
+
+        self.blocks = nn.Sequential(*blocks)
+        
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d)):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)    
+
+    def get_features(self, x, feat_type='relu'):
+        outputs = []
+        # do not contain the last layer
+        for block in self.blocks[:-1]:
+            if isinstance(block, (PreViTTrans, EncoderBlock)):
+                x = block(x)
+                n, hw, c = x.size()
+                h = w = int(hw**(0.5))
+                outputs.append(x.reshape(n, h, w, c).permute(0,3,1,2).detach().cpu())    
+            elif isinstance(block, (PreSwinTrans, SwinTransformerBlock)):
+                x = block(x)
+                outputs.append(x.permute(0,3,1,2).detach().cpu())
+            else:
+                if isinstance(block, (Flatten)):
+                    x = block(x)
+                else:
+                    x = block(x)
+                    outputs.append(x.detach().cpu())
+
+        return outputs
+
+    def forward(self, x, onnx=False):
+        for block in self.blocks:
+            if isinstance(block, (EncoderBlock, SwinTransformerBlock)):
+                x = block(x, onnx=onnx)
+            else:
+                x = block(x)
         return x
 
 

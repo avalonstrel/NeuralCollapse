@@ -22,6 +22,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a model')
     parser.add_argument('--config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
+    parser.add_argument('--data-dir', help='the dir to the datasets, just for different servers.')
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -73,6 +74,10 @@ def main(rank=0):
     elif cfg.get('work_dir', None) is None:
         # use config filename as default work_dir if cfg.work_dir is None
         cfg.work_dir = './exprs/tmp'
+    if args.data_dir is not None:
+        cfg.data.train.root = [os.path.join(args.data_dir, os.path.basename(root)) for root in cfg.data.train.root]
+        cfg.data.val.root = [os.path.join(args.data_dir, os.path.basename(root)) for root in cfg.data.val.root]
+        cfg.data.test.root = [os.path.join(args.data_dir, os.path.basename(root)) for root in cfg.data.test.root]
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     # print(args.gpu_ids)

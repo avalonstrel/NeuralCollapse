@@ -51,10 +51,14 @@ class NCRunner:
             if len(ckpt_paths) > 0:
                 max_length = max([len(ckpt) for ckpt in ckpt_paths])
                 ckpt_paths = [ckpt for ckpt in ckpt_paths if len(ckpt) == max_length]
-                latest_ckpt_path = max(ckpt_paths)
-                print(f'resume from {latest_ckpt_path}')
-                map_location = next(self.models['cls'].parameters()).device
-                self.resume(latest_ckpt_path, map_location=map_location)
+                for latest_ckpt_path in reversed(sorted(ckpt_paths)):
+                    print(f'resume from {latest_ckpt_path}')
+                    map_location = next(self.models['cls'].parameters()).device
+                    try:
+                        self.resume(latest_ckpt_path, map_location=map_location)
+                        break
+                    except:
+                        self.logger.info('Resume Error. Try Previous Iteraiton.')
 
     @property
     def model_name(self) -> str:

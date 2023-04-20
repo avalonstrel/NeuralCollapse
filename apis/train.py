@@ -92,14 +92,13 @@ def train_model(cfg,
     # build model and initialize, dict
     models = build_models(cfg.model)
 
-    
-
     # build losses
     losses = build_losses(cfg.loss)
 
     logger.info('Models and losses building finished.')
     logger.info(f'Model Summary: {models}')
     # build datasets
+    
     datasets = build_datasets(cfg.data.train)  # A dict of datasets
     if len(cfg.workflow) == 2:
         # Not Implemented yet, may usable for train+val

@@ -8,13 +8,13 @@ from .swintransformer import SwinClassifier
 from .senet import SENetClassifier
 from .odenet import ODEClassifier
 from .vit import ViTClassifier
-from .hybridnet import HybridNetClassifier, HybridODEClassifier
+from .hybridnet import HybridNetClassifier, HybridODEClassifier, PureHybridNetClassifier
 
 __all__ = [
     'VGGClassifier', 'ResNetClassifier', 'InceptionClassifier', 'DenseNetClassifier',
     'SqueezeNetClassifier', 'DenseNetClasssifier', 'SENetClassifier',
     'SwinClassifier', 'MobileNetClassifier', 'ODEClassifier', 'ViTClassifier',
-    'HybridNetClassifier', 'HybridODEClassifier',
+    'HybridNetClassifier', 'PureHybridNetClassifier', 'HybridODEClassifier',
     'ResNetSSLModel'
 ]
 

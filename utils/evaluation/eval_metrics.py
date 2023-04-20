@@ -23,7 +23,7 @@ def accuracy(output, target, topk=(1,)):
             res[k] = (correct_k / batch_size)
         return res
 
-def fuzziness(feats, labels):
+def fuzziness(feats, labels, num_classes):
     """
     Compute fuzziness according to features and corresponding labels.
     Args:
@@ -36,7 +36,7 @@ def fuzziness(feats, labels):
     
     feats = copy.deepcopy(feats)
     labels = copy.deepcopy(labels)
-    feats = feats.reshape(feats.size(0), -1)  # [N x C]
+    feats = feats.reshape(feats.size(0), -1).to(device)  # [N x C]
     C = feats.size(1)
 
     feats = feats.to(device)
@@ -46,11 +46,13 @@ def fuzziness(feats, labels):
     feats = feats - whole_feat_mean.view(1, -1)
     
     # compute mean
-    class_idxs = list(range(10))
+    class_idxs = list(range(num_classes))
     feat_means = [[] for _ in class_idxs]  #{0:[C], 1:[C], 2:[C], ...}
+    
     for idx, label in enumerate(labels):
         label_ = int(label.item())
         feat_means[label_].append(feats[idx])
+    feats = feats.cpu()
     
     signal_b = torch.zeros(C, C).to(device)
     signal_w = torch.zeros(C, C).to(device)
@@ -58,25 +60,22 @@ def fuzziness(feats, labels):
         class_feats = torch.stack(feat_means[k])
         feat_mean = class_feats.mean(dim=0)
         
-        diff_b = feat_mean #- whole_feat_mean
-        tmp_test = torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1))
-        
+        diff_b = feat_mean 
         signal_b = signal_b + \
                       torch.matmul(diff_b.reshape(-1, 1), diff_b.reshape(1, -1)) * len(feat_means[k])
-       
+        
         diff_w =  class_feats - feat_mean.view(1, -1)
-        # diff_w = diff_w[:C]
+        
         signal_w = signal_w + torch.matmul(torch.transpose(diff_w, 0, 1), diff_w)
 
     signal_b = signal_b / float(feats.size(0))
-    signal_w = signal_w / float(feats.size(0))
+    signal_w = (signal_w / float(feats.size(0))).cpu()
     inv_signal_b = torch.linalg.pinv(signal_b, rcond=1e-5)
+    signal_b = signal_b.cpu()
 
-    D_seperation = torch.trace(torch.matmul(signal_w, inv_signal_b))
-
-    return D_seperation, signal_b, signal_w
+    D_seperation = torch.trace(torch.matmul(signal_w.to(device), inv_signal_b)) 
     
-
+    return D_seperation, signal_b.cpu(), signal_w.cpu()
 
 def calculate_confusion_matrix(pred, target):
     """Calculate confusion matrix according to the prediction and target.

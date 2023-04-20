@@ -4,3 +4,4 @@ easydict
 opencv-python
 torchdiffeq
 tensorboard
+cvxpy
