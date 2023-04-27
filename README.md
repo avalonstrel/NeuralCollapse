@@ -4,7 +4,10 @@ Reproduction for A Law of Data Separation in Deep Learning, mainly focus on MLP 
 
 ### Main Results
 
-
+![Main Results](https://github.com/avalonstrel/NeuralCollapse/blob/mlp/figures/mlp/results/optims_layers_stn.png)
+Frist two layers corresponds to SGD and Momentum optimization, the third row means the network with Layer normalization.
+Columns represents the numbers of the MLP.
+We can find the results fit the conclusion in the paper.
 ### Running
 #### Training Models from Scratch
 
