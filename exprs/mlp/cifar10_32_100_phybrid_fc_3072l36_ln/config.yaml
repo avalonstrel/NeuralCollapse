@@ -1,0 +1,129 @@
+# whole training setting
+seed: 97
+device: 'cuda'
+gpu_ids: [0]
+workflow: 'train'
+work_dir: ''
+max_epochs: 600
+log_level: INFO
+# dist_params: 
+
+# resume first then load
+# resume_from: '/home/lhy/Projects/GeneralTransfer/exprs/cifar_tuberlin/20230123/chckpoints/iter_5.pth'
+resume_from: ''
+load_from: ''
+
+# 'VGGBlock':vgg_layers,
+# 'ResBlock':BasicBlock,
+# 'ResBottleneck':Bottleneck,
+# 'InceptionA':InceptionA,
+# 'InceptionB':InceptionB,
+# 'InceptionC':InceptionC,
+# 'InceptionD':InceptionD,
+# 'ViTBlock':EncoderBlock,
+# 'SwinBlock':SwinTransformerBlock,
+# 'PatchMerging':PatchMerging
+
+# TEMPLATE_BLOCKS = [
+#     'vgg_layers':(cfg: [64,'M'],  norm_type: 'bn', tmp_inputs),  # Simple CNN Layers
+#     'BasicBlock':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
+#     'Bottleneck':(inplanes: int, planes: int, stride: int = 1, norm_type = 'bn', tmp_inputs = None),
+#     'InceptionA':(in_channels: int, pool_features: int),
+#     'InceptionB':(in_channels),
+#     'InceptionC':(in_channels: int, channels_7x7: int),
+#     'InceptionD':(in_channels),
+#     'ViTBlock':(num_heads: int, hidden_dim: int, mlp_dim: int, dropout, att_dropout),
+#     'SwinBlock':(dim: int, num_heads: int, window_size: List[int], shift_size: List[int],),
+#     'PatchMerging':(dim:input C)
+#     PreTransformerConv: in_channels, out_channels, in_size, patch_size
+#     PostTransformerConv: in_channels, out_channels
+# ]
+# 
+runner:
+  type: 'NC'
+  print_every: 500
+  val_every: 1000
+  save_every: 500
+  sample_size: 500
+model:
+  type: ['purehybrid']
+  dropout: 0.
+  num_classes: 10
+  image_size: 32
+  norm_type: bn
+  structures: [
+    # VGG Blocks 3 x 32 x 32
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 3072, 'ln']]],  
+    ['FC', [[3072, 10, None, 'False']]],  
+  ]
+loss:
+  type: ['CE']
+optim:
+  type: SGD
+  lr: 0.0001
+  momentum: 0.9
+  weight_decay: 0.0005
+  nesterov: True
+data:
+  samples_per_gpu: 128  #batch size
+  workers_per_gpu: 4
+  train:
+    type: ['cifar10']
+    root: ['/mnt/beegfs/hlinbh/datasets/CIFAR10']
+    resized_size: [[32,32]]
+    transforms: [
+                  ['Resize', 'ToTensor', 'Normalize'],
+                ]
+  val:
+    type: ['cifar10']
+    root: ['/mnt/beegfs/hlinbh/datasets/CIFAR10']
+    resized_size: [[32,32]]
+    transforms: [
+                  ['Resize',  'ToTensor', 'Normalize'],
+                ]
+  test: 
+    type: ['cifar10']
+    root: ['/mnt/beegfs/hlinbh/datasets/CIFAR10']
+    resized_size: [[224,224]]
+    transforms: [
+                  ['Resize',  'ToTensor'],
+                ]
+  # train_loader: ''
+  # val_loader: ''
+  # test_loader: ''
+# sampler:
