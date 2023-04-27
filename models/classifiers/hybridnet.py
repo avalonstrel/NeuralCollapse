@@ -117,8 +117,12 @@ class FCLayer(nn.Module):
             if isinstance(act, str):
                 act = eval(act)
         self.fc = nn.Linear(in_channels, out_channels)
-        if norm is not None and norm == 'bn':
-            self.norm = nn.BatchNorm1d(out_channels)
+        if norm is not None:
+            assert norm in ['bn', 'ln', 'None'], f'norm type {norm} not supported.' 
+            if norm == 'bn':
+                self.norm = nn.BatchNorm1d(out_channels)
+            elif norm == 'ln':
+                self.norm = nn.LayerNorm(out_channels)
         if act:
             self.act = nn.ReLU(True)
 
@@ -196,6 +200,8 @@ def vgg_layers(cfg, norm_type='bn', tmp_inputs=None):
             tmp_inputs = conv2d(tmp_inputs)
             if norm_type == 'bn':
                 layers += [conv2d, nn.BatchNorm2d(v)]
+            elif norm_type == 'bnf':
+                layers += [conv2d, nn.BatchNorm2d(v, track_running_stats=False)]
             elif norm_type == 'ln':
                 layers += [conv2d, nn.LayerNorm(tmp_inputs.size()[1:])]
             elif norm_type == 'in':
@@ -316,8 +322,6 @@ class HybridNetClassifier(nn.Module):
         x = self.in_conv(x)
         outputs.append(x.detach().cpu())
         for block in self.blocks:
-            
-
             if isinstance(block, (PreViTTrans, EncoderBlock)):
                 x = block(x)
                 n, hw, c = x.size()

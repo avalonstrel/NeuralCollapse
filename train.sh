@@ -1,5 +1,5 @@
 
-expr_prefix="pure_hybrids"
+expr_prefix="mlp"  # pure_hybrids
 # config_names="cifar10_32_100_hybrid_conv_256s16k3l12 cifar10_32_100_hybrid_conv_256s16k7l12 cifar10_32_100_hybrid_conv_512s4k1l9 cifar10_32_100_hybrid_conv_512s4k1l15"
 # config_names2="cifar10_32_100_hybrid_conv_512s4k3l9 cifar10_32_100_hybrid_conv_512s4k3l15 cifar10_32_100_hybrid_conv_512s8k3l12 cifar10_32_100_hybrid_conv_512s16k3l12 cifar10_32_100_hybrid_conv_512s16k7l12"
 # config_names="cifar10_32_100_hybrid_conv_512s16k7l12"
@@ -81,30 +81,39 @@ expr_prefix="pure_hybrids"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_32s32k3l12A_adam cifar10_32_100_phybrid_conv_32s32k5l12A_adam cifar10_32_100_phybrid_conv_32s32k7l12A_adam"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_64s8k3l12A_adam cifar10_32_100_phybrid_conv_64s8k5l12A_adam cifar10_32_100_phybrid_conv_64s8k7l12A_adam"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_16s8k3l12A_adam cifar10_32_100_phybrid_conv_16s8k5l12A_adam cifar10_32_100_phybrid_conv_16s8k7l12A_adam"
-config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k7l12A_adam_lr00005"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k7l12A_adam_lr00005"
+# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_ln cifar10_32_100_phybrid_fc_3072l9_ln cifar10_32_100_phybrid_fc_3072l12_ln cifar10_32_100_phybrid_fc_3072l15_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_in cifar10_32_100_phybrid_conv_128s4k5l12A_adam_in cifar10_32_100_phybrid_conv_128s4k7l12A_adam_in"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_in cifar10_32_100_phybrid_conv_128s8k5l12A_adam_in cifar10_32_100_phybrid_conv_128s8k7l12A_adam_in"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_in cifar10_32_100_phybrid_conv_128s16k5l12A_adam_in cifar10_32_100_phybrid_conv_128s16k7l12A_adam_in"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k7l12A_adam_ln"
+config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_bn cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn cifar10_32_100_phybrid_fc_3072l36_bn"
+config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_bnf cifar10_32_100_phybrid_fc_3072l9_bnf cifar10_32_100_phybrid_fc_3072l12_bnf cifar10_32_100_phybrid_fc_3072l15_bnf cifar10_32_100_phybrid_fc_3072l36_bnf"
+config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_ln cifar10_32_100_phybrid_fc_3072l9_ln cifar10_32_100_phybrid_fc_3072l12_ln cifar10_32_100_phybrid_fc_3072l15_ln cifar10_32_100_phybrid_fc_3072l36_ln"
+
 # config_names=cifar10_32_100_phybrid_fc_3072l6_bn
 # # seeds="97 177 197 223 337 463 759 777 919 7 99 103"
 seeds="97 177"
 
 gpu_ids=(0 1)
 gpu_num=2
-max_num=6
+max_num=16
 curr_num=0
 run_names=""
 # datadir="/sdc1/hylin/datasets"
-datadir="/home/lhy/datasets"
-# datadir="/mnt/beegfs/hlinbh/datasets"  
+# datadir="/home/lhy/datasets"
+datadir="/mnt/beegfs/hlinbh/datasets"  
 for seed in $seeds
 do
     for config_name in $config_names    
     do
         date=$seed
         workdir=./exprs/$expr_prefix/$config_name/$date/
-
         if [[ ! -d $workdir ]]; then
             mkdir $workdir
         fi
-
         cp ./exprs/$expr_prefix/$config_name/config.yaml $workdir
         
         gpu_id=${gpu_ids[$(($curr_num % $gpu_num))]}

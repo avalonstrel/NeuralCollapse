@@ -286,7 +286,6 @@ def get_metric_vals(layer_i, metric_types, feats, labels, num_classes, args):
             metric_vals.append(metric_val)
             real_metric_types.append(metric_type)
 
-        
     return metric_vals, real_metric_types, augment_datas
 
 # margin, sep_loss, sep_stn, sep_stn_loss, stn, proj_dist, norm_dist

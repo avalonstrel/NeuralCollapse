@@ -180,41 +180,6 @@ def separation_stn_loss(feats, labels, num_classes, C_intermediate, after_settin
         repeat_loss_vals.append(mean_loss_vals[-1])
     
     return np.log(np.mean(repeat_stn_vals)), np.mean(repeat_loss_vals)
-
-def cvx_test(size=100, norm_type=2):
-    h = cvx.Variable(5)
-    A = np.random.randn(size, size)
-    Bs = np.random.randn(5, size, size)
-    obj = cvx.norm((A - sum([h[k] * Bs[k] for k in range(5)])), norm_type)
-    prob = cvx.Problem(cvx.Minimize(obj))
-    prob.solve()
-    print("status:", prob.status)
-    print("optimal value", prob.value)
-    print("optimal var", h.value)
-
-def minimal_margin(feats, labels, num_classes, batch_num=1, epoch_num=200, after_settings=(3, 1, 1), ):
-    """
-    Compute minimal according to features and corresponding labels.
-    Args:
-        feats[torch.tensor, N x [*]]: features used to compute margin
-        labels[torch.tensor, N]: labels used to compute the margin
-    Return:
-        minimal margin[float]
-    """
-    
-    preds, mean_loss_vals = get_dual_weight(feats, labels, after_settings, num_classes, batch_num=batch_num, epoch_num=epoch_num)
-    print('mean_loss_vals', mean_loss_vals[-5:])
-    margin_val = 0
-    for i in range(preds.size(0)):
-        pred, label = preds[i], labels[i]
-        tmp_val = (pred[label]-pred).sum() / (num_classes - 1)
-        margin_val += tmp_val
-    margin_val = margin_val / preds.size(0)
-
-    # mininal marginal
-    # preds_max_val = preds.max(dim=1, keepdim=True)[0]
-    # margin_val = (-(preds - preds_max_val).topk(2, dim=1)[0][:, -1]).min()
-    return margin_val
     
 def reshape_conv_feats(feats, kernel_size, stride, padding):
     """
@@ -233,14 +198,11 @@ def reshape_conv_feats(feats, kernel_size, stride, padding):
     P_H = H + 2 * padding - kernel_size + 1  # patch number
     P_W = W + 2 * padding - kernel_size + 1  # patch number
     patch_feats = []
-    # print('patch size', P_H, P_W)
     for i in range(P_H):
         for j in range(P_W):
             tmp_feats = padded_feats[:, :, i:i+kernel_size, j:j+kernel_size]  # N C 3 3 
             patch_feats.append(tmp_feats.reshape(N, 1, kernel_size**2 * C))
-    # print('pathc len', len(patch_feats))
     patch_feats = torch.cat(patch_feats, dim=1)
-    # print("patch_feats", patch_feats.size())
     return patch_feats
 
 def project_cvx_func(A, Bs, norm_type=2):
@@ -253,9 +215,6 @@ def project_cvx_func(A, Bs, norm_type=2):
     objective = cvx.Minimize(cvx.norm(A - sum_B, norm_type))
     prob = cvx.Problem(objective)
     prob.solve()
-    # print("status:", prob.status)
-    # print("optimal value", prob.value)
-    # print("optimal var", proj_c.value)
     projected_A = sum([proj_c.value[k] * Bs[k] for k in range(num_classes)])
     return torch.from_numpy(projected_A).to(device), prob.value
 
@@ -269,20 +228,9 @@ def project_cvx_sdp_func(A, Bs, norm_type=2):
     t = cvx.Variable(1)
     sum_B = sum([proj_c[k] * Bs[k] for k in range(num_classes)])
     objective = cvx.Minimize(t)
-    # tmpA = t*np.eye(sum_B.shape[1])
-    # tmpB = A - sum_B
-    # print(tmpA.shape, tmpB.shape)
-    # print(tmpA, tmpB)
-    # tmp1 = np.concatenate([tmpA, tmpB], axis=0)
-    # tmp2 = np.concatenate([(A - sum_B).T, t*np.eye(sum_B.shape[0])], axis=0)
-    # sdp_constraint_matrix = np.concatenate([tmp1, tmp2], axis=1)
-    # print(sdp_constraint_matrix.shape)
     constraints = [(A - sum_B).T @ (A - sum_B) << t * np.eye(sum_B.shape[1])]
     prob = cvx.Problem(objective, constraints)
     prob.solve()
-    # print("status:", prob.status)
-    # print("optimal value", prob.value)
-    # print("optimal var", proj_c.value, t.value)
     projected_A = sum([proj_c.value[k] * Bs[k] for k in range(num_classes)])
     return torch.from_numpy(projected_A).to(device), prob.value
 
@@ -298,7 +246,6 @@ def project_pytorch_func(A, Bs,
     
     # proj_c = torch.randn(num_classes).to(device)
     proj_c = fro_initialization(A, Bs).detach().to(device)
-    # print('init', proj_c)
     proj_c.requires_grad=True
     params = [proj_c]
     A = A.to(device)
@@ -406,14 +353,6 @@ def sigma_to_mu(projected_feats, projected_labels, projected_feats_means, dist_f
         
     dist_within = dist_within / N
 
-    # between distances
-    # if dist_type == 'mean':
-    # K = len(projected_feats)
-    # whole_feat_mean = sum(projected_feats) / len(projected_feats)
-    # dist_between = 0
-    # for i in range(K):
-    #     dist_between += dist_func(projected_feats[i], whole_feat_mean)
-    # dist_between = dist_between / K
     K = len(projected_feats_means)
     dist_between = 0
     for i in range(K-1):
@@ -492,7 +431,6 @@ def norm_distance(feats, labels, num_classes, kernel_size, stride, padding,
             patch_feats = feats.reshape(N, C, H*W)
             norm_type = 'fro'
         else:
-            # patch_feats = feats.reshape(feats.size(0), feats.size(1), -1).permute(0, 2, 1)
             patch_feats = reshape_conv_feats(feats, kernel_size, stride, padding)
 
     # Compute the feat means
@@ -511,7 +449,7 @@ def norm_distance(feats, labels, num_classes, kernel_size, stride, padding,
         if len(x.size()) == 1:
             x = x.reshape(-1, 1)
             y = y.reshape(-1, 1)
-        return torch.linalg.matrix_norm(x-y, norm_type).detach().cpu().item()
+        return (torch.linalg.matrix_norm(x-y, norm_type)).detach().cpu().item()
     
     # within distances
     dist_within = 0
@@ -532,7 +470,6 @@ def norm_distance(feats, labels, num_classes, kernel_size, stride, padding,
     dist_between = dist_between / K
     mean_dist_between = dist_between
     
-    
     dist_between = 0
     for i in range(K-1):
         for j in range(i+1, K):
@@ -542,8 +479,6 @@ def norm_distance(feats, labels, num_classes, kernel_size, stride, padding,
     print(dist_within, dist_between, mean_dist_between)
     return dist_within, dist_between, mean_dist_between
 
-    
-    
 def distance_WB(feats, labels, num_classes=10):
     """
     Compute fuzziness according to features and corresponding labels.
@@ -706,8 +641,6 @@ def general_signal_to_noise(feats, labels, num_classes, dim, kernel_size, stride
         signal_b = signal_b + svd_max_cov(diff_b)
                     #   torch.matmul(diff_b, diff_b.transpose(0, 1)) * len(feat_means[k])
                     
-        
-
     diff_w =  class_feats - feat_mean.view(1, C1, C2)
     
     if dim == 2:
