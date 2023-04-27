@@ -118,9 +118,11 @@ class FCLayer(nn.Module):
                 act = eval(act)
         self.fc = nn.Linear(in_channels, out_channels)
         if norm is not None:
-            assert norm in ['bn', 'ln', 'None'], f'norm type {norm} not supported.' 
+            assert norm in ['bn', 'ln', 'bnf', 'None'], f'norm type {norm} not supported.' 
             if norm == 'bn':
                 self.norm = nn.BatchNorm1d(out_channels)
+            elif norm == 'bnf':
+                self.norm = nn.BatchNorm1d(out_channels, track_running_stats=False)
             elif norm == 'ln':
                 self.norm = nn.LayerNorm(out_channels)
         if act:
