@@ -1,74 +1,40 @@
-
-expr_prefix="pure_hybrids"  # measure_test pure_hybrids
-# config_names=cifar10_32_100_hybrid_conv_256s16k3l12
-# config_names="cifar10_32_100_hybrid_conv_128down2k3l12 cifar10_32_100_hybrid_conv_128down4k3l9 cifar10_32_100_hybrid_conv_128s16k3l12 cifar10_32_100_hybrid_conv_128s16k7l12 cifar10_32_100_hybrid_conv_512down2k3l12"
-
-# config_names="cifar10_32_100_hybrid_conv_256s16k3l12 cifar10_32_100_hybrid_conv_128down2k3l12 cifar10_32_100_hybrid_conv_128down4k3l9 cifar10_32_100_hybrid_conv_128s16k3l12 cifar10_32_100_hybrid_conv_128s16k7l12 cifar10_32_100_hybrid_conv_fc_up512down4k3l9lf3_fc2048"
-# config_names="cifar10_32_100_hybrid_conv_128s4k5l12 cifar10_32_100_hybrid_conv_128s8k5l12 cifar10_32_100_hybrid_conv_128s16k5l12" #cifar10_32_100_hybrid_conv_128s4k3l12 cifar10_32_100_hybrid_conv_128s8k3l12 cifar10_32_100_hybrid_conv_128s16k3l12
-# config_names=${config_names}" cifar10_32_100_hybrid_conv_128s4k7l12 cifar10_32_100_hybrid_conv_128s8k7l12 cifar10_32_100_hybrid_conv_128s16k7l12"
-# config_names=${config_names}" cifar10_32_100_hybrid_conv_128s4k3l12 cifar10_32_100_hybrid_conv_128s8k3l12 cifar10_32_100_hybrid_conv_128s16k3l12"
-
-# config_names=${config_names}" cifar10_32_100_hybrid_conv_128down2k3l12 cifar10_32_100_hybrid_conv_128down4k3l18 cifar10_32_100_hybrid_conv_128down2k3l24"
-# config_names=${config_names}" cifar10_32_100_hybrid_conv_512s4k3l12 cifar10_32_100_hybrid_conv_512s8k3l12 cifar10_32_100_hybrid_conv_512s16k3l12"  cifar10_32_100_hybrid_conv_128s16k3l36
-
-# config_names="cifar10_32_100_phybrid_conv_128s4k3l12 cifar10_32_100_phybrid_conv_128s4k5l12 cifar10_32_100_phybrid_conv_128s4k7l12"
-
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12 cifar10_32_100_phybrid_conv_128s16k5l12 cifar10_32_100_phybrid_conv_128s16k7l12"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k3l12 cifar10_32_100_phybrid_conv_128s32k5l12 cifar10_32_100_phybrid_conv_128s32k7l12"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12M_adam cifar10_32_100_phybrid_conv_128s16k5l12M_adam cifar10_32_100_phybrid_conv_128s16k7l12M_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k3l12A_adam cifar10_32_100_phybrid_conv_128s32k5l12A_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam cifar10_32_100_phybrid_conv_128s4k5l12A_adam cifar10_32_100_phybrid_conv_128s4k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam cifar10_32_100_phybrid_conv_128s8k5l12A_adam cifar10_32_100_phybrid_conv_128s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k3l12A_adam cifar10_32_100_phybrid_conv_128s32k5l12A_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12_adam cifar10_32_100_phybrid_conv_128s16k5l12_adam cifar10_32_100_phybrid_conv_128s16k7l12_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam cifar10_32_100_phybrid_conv_128s8k3l12A_adam cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s32k3l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k5l12A_adam cifar10_32_100_phybrid_conv_128s8k5l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s32k5l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k7l12A_adam cifar10_32_100_phybrid_conv_128s8k7l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam cifar10_32_100_phybrid_conv_128s8k5l12A_adam cifar10_32_100_phybrid_conv_128s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12M_adam cifar10_32_100_phybrid_conv_128s16k5l12M_adam cifar10_32_100_phybrid_conv_128s16k7l12M_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k3l12A_adam cifar10_32_100_phybrid_conv_128s32k5l12A_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_bn_norelu cifar10_32_100_phybrid_fc_3072l9_bn_norelu cifar10_32_100_phybrid_fc_3072l12_bn_norelu cifar10_32_100_phybrid_fc_3072l15_bn_norelu"
-# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_bn cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_bn cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn"
-# config_names="cifar10_32_100_phybrid_conv_128s4k3l12"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_32s4k3l12A_adam cifar10_32_100_phybrid_conv_32s4k5l12A_adam cifar10_32_100_phybrid_conv_32s4k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam cifar10_32_100_phybrid_conv_128s4k5l12A_adam cifar10_32_100_phybrid_conv_128s4k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam cifar10_32_100_phybrid_conv_128s8k5l12A_adam cifar10_32_100_phybrid_conv_128s8k7l12A_adam"
-
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_256s8k3l12A_adam cifar10_32_100_phybrid_conv_256s8k5l12A_adam cifar10_32_100_phybrid_conv_256s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_512s8k3l12A_adam cifar10_32_100_phybrid_conv_512s8k5l12A_adam cifar10_32_100_phybrid_conv_512s8k7l12A_adam"
-
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam cifar10_32_100_phybrid_conv_128s16k5l12A_adam cifar10_32_100_phybrid_conv_128s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k7l12M_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam_lr001"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_32s4k3l12A_adam cifar10_32_100_phybrid_conv_32s4k5l12A_adam cifar10_32_100_phybrid_conv_32s4k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_32s8k3l12A_adam cifar10_32_100_phybrid_conv_32s8k5l12A_adam cifar10_32_100_phybrid_conv_32s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_32s16k3l12A_adam cifar10_32_100_phybrid_conv_32s16k5l12A_adam cifar10_32_100_phybrid_conv_32s16k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_32s32k3l12A_adam cifar10_32_100_phybrid_conv_32s32k5l12A_adam cifar10_32_100_phybrid_conv_32s32k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_256s8k3l12A_adam cifar10_32_100_phybrid_conv_256s8k5l12A_adam cifar10_32_100_phybrid_conv_256s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_512s8k3l12A_adam cifar10_32_100_phybrid_conv_512s8k5l12A_adam cifar10_32_100_phybrid_conv_512s8k7l12A_adam"
-# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s32k3l12A_adam cifar10_32_100_phybrid_conv_128s32k5l12A_adam cifar10_32_100_phybrid_conv_128s32k7l12A_adam"
+expr_prefix="normalization"  #mlp measure_test pure_hybrids normalization
 # config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn"
 # config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l6_ln cifar10_32_100_phybrid_fc_3072l9_ln cifar10_32_100_phybrid_fc_3072l12_ln cifar10_32_100_phybrid_fc_3072l15_ln"
 
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_in cifar10_32_100_phybrid_conv_128s4k5l12A_adam_in cifar10_32_100_phybrid_conv_128s4k7l12A_adam_in"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_in cifar10_32_100_phybrid_conv_128s8k5l12A_adam_in cifar10_32_100_phybrid_conv_128s8k7l12A_adam_in"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_in cifar10_32_100_phybrid_conv_128s16k5l12A_adam_in cifar10_32_100_phybrid_conv_128s16k7l12A_adam_in"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l9_ln_adam cifar10_32_100_phybrid_fc_3072l9_ln_sgd cifar10_32_100_phybrid_fc_3072l9_ln_sgdmn"
+# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l15_ln_adam cifar10_32_100_phybrid_fc_3072l15_ln_sgd cifar10_32_100_phybrid_fc_3072l15_ln_sgdmn"
+
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s4k5l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s4k7l12A_sgdmn_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s8k5l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s8k7l12A_sgdmn_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s16k5l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s16k7l12A_sgdmn_ln"
+
+# config_names=${config_names}"cifar10_32_100_phybrid_fc_3072l9_bn_sgd cifar10_32_100_phybrid_fc_3072l12_bn_sgd cifar10_32_100_phybrid_fc_3072l15_bn_sgd"
+# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn"
+# config_names=${config_names}" cifar10_32_100_phybrid_fc_3072l9_bn_adam cifar10_32_100_phybrid_fc_3072l12_bn_adam cifar10_32_100_phybrid_fc_3072l15_bn_adam"
+config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_bnf cifar10_32_100_phybrid_conv_128s4k5l12A_adam_bnf cifar10_32_100_phybrid_conv_128s4k7l12A_adam_bnf"
 config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s4k7l12A_adam_ln"
+config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_bnf cifar10_32_100_phybrid_conv_128s8k5l12A_adam_bnf cifar10_32_100_phybrid_conv_128s8k7l12A_adam_bnf"
 config_names=${config_names}" cifar10_32_100_phybrid_conv_128s8k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k7l12A_adam_ln"
-config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k7l12A_adam_ln"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k5l12A_adam"
+# config_names=${config_names}" cifar10_32_100_phybrid_conv_128s16k3l12A_adam_bnf cifar10_32_100_phybrid_conv_128s16k5l12A_adam_bnf cifar10_32_100_phybrid_conv_128s16k7l12A_adam_bnf"
 # config_names=${config_names}" cifar10_32_100_phybrid_conv_128s4k3l12A_adam"
 # # seeds="97 177 197 223 337 463 759 777 919 7 99 103"
 gpu_ids=(0 1) #(4 5 6 7)  (0 1)
 seeds="97 177"
-metric_types="gstn"  #margin, sep_loss, sep_stn, sep_stn_loss, stn, gstn, proj_dist, norm_dist
+metric_types="norm_dist"  #margin, sep_loss, sep_stn, sep_stn_loss, stn, gstn, proj_dist, norm_dist
 gstn_dim=2
 gpu_num=2
-max_num=16
+max_num=8
 curr_num=0
 net_type="downfc"
 C_intermediates="16"
@@ -115,7 +81,7 @@ do
                 then
                     echo $seed
                     echo $config_name
-                    python3 analysis_revised.py --model_names $config_name \
+                    python3 analysis.py --model_names $config_name \
                                         --gpu_id $gpu_id \
                                         --seeds $seed \
                                         --feat_types $tag \

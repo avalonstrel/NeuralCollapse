@@ -223,20 +223,45 @@ if __name__ == '__main__':
             " cifar10_32_100_phybrid_conv_16s8k5l12A_adam cifar10_32_100_phybrid_conv_32s8k5l12A_adam cifar10_32_100_phybrid_conv_64s8k5l12A_adam" + 
             " cifar10_32_100_phybrid_conv_16s8k7l12A_adam cifar10_32_100_phybrid_conv_32s8k7l12A_adam cifar10_32_100_phybrid_conv_64s8k7l12A_adam", 
             (3, 3)
+        ],
+        'sizes_kernels_adam_ln':[
+            "cifar10_32_100_phybrid_conv_128s4k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k3l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k3l12A_adam_ln " +  
+            " cifar10_32_100_phybrid_conv_128s4k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k5l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k5l12A_adam_ln" + 
+            " cifar10_32_100_phybrid_conv_128s4k7l12A_adam_ln cifar10_32_100_phybrid_conv_128s8k7l12A_adam_ln cifar10_32_100_phybrid_conv_128s16k7l12A_adam_ln", 
+            (3, 3)
+        ],
+        'sizes_kernels_sgdmn_ln':[
+            "cifar10_32_100_phybrid_conv_128s4k3l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s8k3l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s16k3l12A_sgdmn_ln " +  
+            " cifar10_32_100_phybrid_conv_128s4k5l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s8k5l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s16k5l12A_sgdmn_ln" + 
+            " cifar10_32_100_phybrid_conv_128s4k7l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s8k7l12A_sgdmn_ln cifar10_32_100_phybrid_conv_128s16k7l12A_sgdmn_ln", 
+            (3, 3)
+        ],
+        'optims_layers_bn':[
+            "cifar10_32_100_phybrid_fc_3072l9_bn_sgd cifar10_32_100_phybrid_fc_3072l12_bn_sgd cifar10_32_100_phybrid_fc_3072l15_bn_sgd " +  
+            " cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn" + 
+            " cifar10_32_100_phybrid_fc_3072l9_bn_adam cifar10_32_100_phybrid_fc_3072l12_bn_adam cifar10_32_100_phybrid_fc_3072l15_bn_adam", 
+            (3, 3)
+        ],
+        'normal_layers_mlp':[
+            "cifar10_32_100_phybrid_fc_3072l9_bn cifar10_32_100_phybrid_fc_3072l12_bn cifar10_32_100_phybrid_fc_3072l15_bn " +  
+            " cifar10_32_100_phybrid_fc_3072l9_bnf cifar10_32_100_phybrid_fc_3072l12_bnf cifar10_32_100_phybrid_fc_3072l15_bnf" + 
+            " cifar10_32_100_phybrid_fc_3072l9_ln cifar10_32_100_phybrid_fc_3072l12_ln cifar10_32_100_phybrid_fc_3072l15_ln", 
+            (3, 3)
         ]
-        # Sep loss ?
     }
 
     
-    comparison_settings = 'channels_kernels_c32'
-    metric_tag = '_proj_vtm_root2'
+    comparison_settings = 'normal_layers_mlp'
+    metric_tag = '_stn'
     # tag = 'conv-norm_dist-norm2-block-in-down'
-    tag = 'conv-proj_dist-norm2-fro-mean-adam0.05-pytorch-E50-block-in-down'
+    tag = 'conv-stn-evaltest-block-in-down-rand'
+    # tag = 'conv-stn-evaltest-block-in-down-rand'
+    # tag = 'conv-proj_dist-norm2-fro-mean-adam0.05-pytorch-E50-block-in-down'
     iter_tag = '_iter2500'
     save_name = f'{comparison_settings}{metric_tag}.png'
     
     # Hyper parameters
-    fig_dir = './figures/pure_hybrids'
+    fig_dir = './figures/mlp' #normalization
     seed = '97'
     
     size = 512
@@ -273,7 +298,7 @@ if __name__ == '__main__':
             if tmp_img is None:
                 continue
             whole_image[rh*i:rh*(i+1), rw*j:rw*(j+1), :] = tmp_img
-            
+    os.makedirs(os.path.join(fig_dir, 'results'), exist_ok=True)
     save_path = os.path.join(fig_dir, 'results', save_name)
     Image.fromarray(whole_image.astype(np.uint8)).save(save_path)
 
